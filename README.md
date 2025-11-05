@@ -101,9 +101,7 @@ To reset credentials, delete that directory and rerun the command—`mcporter` w
 Generate a single executable you can ship to agents or drop on a PATH:
 
 ```bash
-npx mcporter generate-cli \
-  --command https://mcp.context7.com/mcp \
-  --compile
+npx mcporter generate-cli --command https://mcp.context7.com/mcp --compile
 chmod +x context7
 ./context7 list-tools
 ./context7 resolve-library-id react
