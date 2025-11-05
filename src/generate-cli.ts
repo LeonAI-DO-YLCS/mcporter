@@ -537,8 +537,16 @@ program.option('-c, --config <path>', 'Alternate mcporter.json path to load serv
 program.option('-s, --server <name>', 'Alternate server name when using --config.');
 program.option('-t, --timeout <ms>', 'Call timeout in milliseconds', (value) => parseInt(value, 10), ${timeoutMs});
 program.option('-o, --output <format>', 'Output format: text|markdown|json|raw', 'text');
-program.addHelpText('before', generatorInfo ? '\\n' + generatorInfo + '\\n' : '');
-program.addHelpText('after', () => (generatorTools ? '\\nTools:\\n' + generatorTools + '\\n' : ''));
+program.addHelpText('after', () => {
+	const sections: string[] = [];
+	if (generatorTools) {
+		sections.push('\\nTools:\\n' + generatorTools + '\\n');
+	}
+	if (generatorInfo) {
+		sections.push('\\n' + generatorInfo + '\\n');
+	}
+	return sections.join('');
+});
 
 ${toolBlocks}
 
