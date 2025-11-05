@@ -77,6 +77,7 @@ interface ClientContext {
 	readonly oauthSession?: OAuthSession;
 }
 
+// createRuntime spins up a pooled MCP runtime from config JSON or provided definitions.
 export async function createRuntime(
 	options: RuntimeOptions = {},
 ): Promise<Runtime> {
@@ -91,6 +92,7 @@ export async function createRuntime(
 	return runtime;
 }
 
+// callOnce connects to a server, invokes a single tool, and disposes the connection immediately.
 export async function callOnce(params: {
 	server: string;
 	toolName: string;
@@ -122,14 +124,17 @@ class McpRuntime implements Runtime {
 		};
 	}
 
+	// listServers returns configured names sorted alphabetically for stable CLI output.
 	listServers(): string[] {
 		return [...this.definitions.keys()].sort((a, b) => a.localeCompare(b));
 	}
 
+	// getDefinitions exposes raw server metadata to consumers such as the CLI.
 	getDefinitions(): ServerDefinition[] {
 		return [...this.definitions.values()];
 	}
 
+	// getDefinition throws when the caller requests an unknown server name.
 	getDefinition(server: string): ServerDefinition {
 		const definition = this.definitions.get(server);
 		if (!definition) {
@@ -138,6 +143,7 @@ class McpRuntime implements Runtime {
 		return definition;
 	}
 
+	// listTools queries tool metadata and optionally includes schemas when requested.
 	async listTools(
 		server: string,
 		options: ListToolsOptions = {},
@@ -152,6 +158,7 @@ class McpRuntime implements Runtime {
 		}));
 	}
 
+	// callTool executes a tool using the args provided by the caller.
 	async callTool(
 		server: string,
 		toolName: string,
@@ -165,6 +172,7 @@ class McpRuntime implements Runtime {
 		return client.callTool(params);
 	}
 
+	// listResources delegates to the MCP resources/list method with passthrough params.
 	async listResources(
 		server: string,
 		options: Partial<ListResourcesRequest["params"]> = {},
@@ -173,6 +181,7 @@ class McpRuntime implements Runtime {
 		return client.listResources(options as ListResourcesRequest["params"]);
 	}
 
+	// connect lazily instantiates a client context per server and memoizes it.
 	async connect(server: string): Promise<ClientContext> {
 		const normalized = server.trim();
 		const existing = this.clients.get(normalized);
@@ -195,6 +204,7 @@ class McpRuntime implements Runtime {
 		}
 	}
 
+	// close tears down transports (and OAuth sessions) for a single server or all servers.
 	async close(server?: string): Promise<void> {
 		if (server) {
 			const normalized = server.trim();
@@ -219,6 +229,7 @@ class McpRuntime implements Runtime {
 		}
 	}
 
+	// createClient wires up transports, optional OAuth sessions, and connects the MCP client.
 	private async createClient(
 		definition: ServerDefinition,
 	): Promise<ClientContext> {
@@ -291,6 +302,7 @@ class McpRuntime implements Runtime {
 		});
 	}
 
+	// connectWithAuth retries MCP connect calls while the OAuth flow progresses.
 	private async connectWithAuth(
 		client: Client,
 		transport: Transport & {

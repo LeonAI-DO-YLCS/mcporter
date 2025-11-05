@@ -4,6 +4,7 @@ import { createRuntime } from "./runtime.js";
 
 type FlagMap = Partial<Record<string, string>>;
 
+// main parses CLI flags and dispatches to list/call commands.
 async function main(): Promise<void> {
 	const argv = process.argv.slice(2);
 	if (argv.length === 0) {
@@ -38,6 +39,7 @@ async function main(): Promise<void> {
 	process.exit(1);
 }
 
+// extractFlags snacks out targeted flags (and their values) from argv in place.
 function extractFlags(args: string[], keys: string[]): FlagMap {
 	const flags: FlagMap = {};
 	let index = 0;
@@ -57,6 +59,7 @@ function extractFlags(args: string[], keys: string[]): FlagMap {
 	return flags;
 }
 
+// handleList prints configured servers and optional tool metadata.
 async function handleList(
 	runtime: Awaited<ReturnType<typeof createRuntime>>,
 	args: string[],
@@ -90,6 +93,7 @@ async function handleList(
 	}
 }
 
+// handleCall invokes a tool, prints JSON, and optionally tails logs.
 async function handleCall(
 	runtime: Awaited<ReturnType<typeof createRuntime>>,
 	args: string[],
@@ -138,6 +142,7 @@ async function handleCall(
 	tailLogIfRequested(result, parsed.tailLog ?? false);
 }
 
+// extractListFlags captures list-specific options such as --schema.
 function extractListFlags(args: string[]): { schema: boolean } {
 	let schema = false;
 	let index = 0;
@@ -161,6 +166,7 @@ interface CallArgsParseResult {
 	tailLog?: boolean;
 }
 
+// parseCallArguments supports selectors, JSON payloads, and key=value args.
 function parseCallArguments(args: string[]): CallArgsParseResult {
 	const result: CallArgsParseResult = { args: {}, tailLog: false };
 	let index = 0;
@@ -226,6 +232,7 @@ function parseCallArguments(args: string[]): CallArgsParseResult {
 	return result;
 }
 
+// coerceValue tries to cast string tokens into JS primitives or JSON.
 function coerceValue(value: string): unknown {
 	const trimmed = value.trim();
 	if (trimmed === "") {
@@ -253,6 +260,7 @@ function coerceValue(value: string): unknown {
 	return trimmed;
 }
 
+// indent adds consistent left padding when printing nested JSON.
 function indent(text: string, pad: string): string {
 	return text
 		.split("\n")
@@ -260,6 +268,7 @@ function indent(text: string, pad: string): string {
 		.join("\n");
 }
 
+// tailLogIfRequested prints the final lines of any referenced log files.
 function tailLogIfRequested(result: unknown, enabled: boolean): void {
 	if (!enabled) {
 		return;
@@ -305,6 +314,7 @@ function tailLogIfRequested(result: unknown, enabled: boolean): void {
 	}
 }
 
+// printHelp explains available commands and global flags.
 function printHelp(message?: string): void {
 	if (message) {
 		console.error(message);

@@ -21,6 +21,7 @@ interface Deferred<T> {
 	reject: (reason?: unknown) => void;
 }
 
+// createDeferred produces a minimal promise wrapper for async coordination.
 function createDeferred<T>(): Deferred<T> {
 	let resolve!: (value: T) => void;
 	let reject!: (reason?: unknown) => void;
@@ -31,6 +32,7 @@ function createDeferred<T>(): Deferred<T> {
 	return { promise, resolve, reject };
 }
 
+// openExternal attempts to launch the system browser cross-platform.
 function openExternal(url: string) {
 	const platform = process.platform;
 	const stdio = "ignore";
@@ -53,10 +55,12 @@ function openExternal(url: string) {
 	}
 }
 
+// ensureDirectory guarantees a directory exists before writing JSON blobs.
 async function ensureDirectory(dir: string) {
 	await fs.mkdir(dir, { recursive: true });
 }
 
+// readJsonFile returns undefined for missing files instead of throwing.
 async function readJsonFile<T>(filePath: string): Promise<T | undefined> {
 	try {
 		const raw = await fs.readFile(filePath, "utf8");
@@ -74,6 +78,7 @@ async function writeJsonFile(filePath: string, data: unknown) {
 	await fs.writeFile(filePath, JSON.stringify(data, null, 2), "utf8");
 }
 
+// FileOAuthClientProvider persists OAuth session artifacts to disk and captures callback redirects.
 class FileOAuthClientProvider implements OAuthClientProvider {
 	private readonly tokenPath: string;
 	private readonly clientInfoPath: string;
@@ -149,6 +154,7 @@ class FileOAuthClientProvider implements OAuthClientProvider {
 		};
 	}
 
+	// attachServer listens for the OAuth redirect and resolves/rejects the deferred code promise.
 	private attachServer(server: http.Server) {
 		this.server = server;
 		server.on("request", async (req, res) => {
@@ -257,6 +263,7 @@ class FileOAuthClientProvider implements OAuthClientProvider {
 		return value.trim();
 	}
 
+	// invalidateCredentials removes cached files to force the next OAuth flow.
 	async invalidateCredentials(
 		scope: "all" | "client" | "tokens" | "verifier",
 	): Promise<void> {
@@ -279,6 +286,7 @@ class FileOAuthClientProvider implements OAuthClientProvider {
 		);
 	}
 
+	// waitForAuthorizationCode resolves once the local callback server captures a redirect.
 	async waitForAuthorizationCode(): Promise<string> {
 		if (!this.authorizationDeferred) {
 			this.authorizationDeferred = createDeferred<string>();
@@ -286,6 +294,7 @@ class FileOAuthClientProvider implements OAuthClientProvider {
 		return this.authorizationDeferred.promise;
 	}
 
+	// close stops the temporary callback server created for the OAuth session.
 	async close(): Promise<void> {
 		if (!this.server) {
 			return;
@@ -309,6 +318,7 @@ export async function createOAuthSession(
 	definition: ServerDefinition,
 	logger: OAuthLogger,
 ): Promise<OAuthSession> {
+	// createOAuthSession spins up a temporary callback server and file-backed provider for OAuth flows.
 	const { provider, close } = await FileOAuthClientProvider.create(
 		definition,
 		logger,
