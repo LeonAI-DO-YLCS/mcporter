@@ -1,13 +1,12 @@
 # Changelog
 
-## Unreleased
+## [Unreleased]
 
-- Document generate-cli flag usage in CLI help and README.
-- Improved generated CLI command usage strings.
-- Added release checklist and changelog scaffolding.
+- Added non-blocking `mcporter list` output with per-server status and parallel discovery.
+- Introduced `mcporter auth <server>` helper (and library API support) so OAuth flows don’t hang list calls.
+- Set the default list timeout to 30 s (configurable via `MCP_LIST_TIMEOUT`).
+- Tuned runtime connection handling to avoid launching OAuth flows when auto-authorization is disabled and to reuse cached clients safely.
 
-## 0.1.0 - 2025-11-05
+## [0.1.0]
 
-- Initial public release of mcporter.
-- TypeScript runtime and CLI generator with automatic config imports.
-- Bundled CLI generation (Node or Bun) plus schema-aware helpers.
+- Initial release.

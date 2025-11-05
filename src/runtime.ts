@@ -40,6 +40,12 @@ export interface CallOptions {
 
 export interface ListToolsOptions {
 	readonly includeSchema?: boolean;
+	readonly autoAuthorize?: boolean;
+}
+
+interface ConnectOptions {
+	readonly maxOAuthAttempts?: number;
+	readonly skipCache?: boolean;
 }
 
 export interface Runtime {
@@ -81,6 +87,7 @@ interface ClientContext {
 export async function createRuntime(
 	options: RuntimeOptions = {},
 ): Promise<Runtime> {
+	// Build the runtime with either the provided server list or the config file contents.
 	const servers =
 		options.servers ??
 		(await loadServerDefinitions({
@@ -148,14 +155,26 @@ class McpRuntime implements Runtime {
 		server: string,
 		options: ListToolsOptions = {},
 	): Promise<ServerToolInfo[]> {
-		const { client } = await this.connect(server);
-		const response = await client.listTools({ server: {} });
-		return (response.tools ?? []).map((tool) => ({
-			name: tool.name,
-			description: tool.description ?? undefined,
-			inputSchema: options.includeSchema ? tool.inputSchema : undefined,
-			outputSchema: options.includeSchema ? tool.outputSchema : undefined,
-		}));
+		// Toggle auto authorization so list can run without forcing OAuth flows.
+		const autoAuthorize = options.autoAuthorize !== false;
+		const context = await this.connect(server, {
+			maxOAuthAttempts: autoAuthorize ? undefined : 0,
+			skipCache: !autoAuthorize,
+		});
+		try {
+			const response = await context.client.listTools({ server: {} });
+			return (response.tools ?? []).map((tool) => ({
+				name: tool.name,
+				description: tool.description ?? undefined,
+				inputSchema: options.includeSchema ? tool.inputSchema : undefined,
+				outputSchema: options.includeSchema ? tool.outputSchema : undefined,
+			}));
+		} finally {
+			if (!autoAuthorize) {
+				await context.transport.close().catch(() => {});
+				await context.oauthSession?.close().catch(() => {});
+			}
+		}
 	}
 
 	// callTool executes a tool using the args provided by the caller.
@@ -182,11 +201,21 @@ class McpRuntime implements Runtime {
 	}
 
 	// connect lazily instantiates a client context per server and memoizes it.
-	async connect(server: string): Promise<ClientContext> {
+	async connect(
+		server: string,
+		options: ConnectOptions = {},
+	): Promise<ClientContext> {
+		// Reuse cached connections unless the caller explicitly opted out.
 		const normalized = server.trim();
-		const existing = this.clients.get(normalized);
-		if (existing) {
-			return existing;
+
+		const useCache =
+			options.skipCache !== true && options.maxOAuthAttempts === undefined;
+
+		if (useCache) {
+			const existing = this.clients.get(normalized);
+			if (existing) {
+				return existing;
+			}
 		}
 
 		const definition = this.definitions.get(normalized);
@@ -194,14 +223,19 @@ class McpRuntime implements Runtime {
 			throw new Error(`Unknown MCP server '${normalized}'.`);
 		}
 
-		const connection = this.createClient(definition);
-		this.clients.set(normalized, connection);
-		try {
-			return await connection;
-		} catch (error) {
-			this.clients.delete(normalized);
-			throw error;
+		const connection = this.createClient(definition, options);
+
+		if (useCache) {
+			this.clients.set(normalized, connection);
+			try {
+				return await connection;
+			} catch (error) {
+				this.clients.delete(normalized);
+				throw error;
+			}
 		}
+
+		return connection;
 	}
 
 	// close tears down transports (and OAuth sessions) for a single server or all servers.
@@ -232,12 +266,16 @@ class McpRuntime implements Runtime {
 	// createClient wires up transports, optional OAuth sessions, and connects the MCP client.
 	private async createClient(
 		definition: ServerDefinition,
+		options: ConnectOptions = {},
 	): Promise<ClientContext> {
+		// Create a fresh MCP client context for the target server.
 		const client = new Client(this.clientInfo);
 
 		return withEnvOverrides(definition.env, async () => {
 			let oauthSession: OAuthSession | undefined;
-			if (definition.auth === "oauth") {
+			const shouldEstablishOAuth =
+				definition.auth === "oauth" && options.maxOAuthAttempts !== 0;
+			if (shouldEstablishOAuth) {
 				oauthSession = await createOAuthSession(definition, this.logger);
 			}
 
@@ -277,6 +315,7 @@ class McpRuntime implements Runtime {
 						streamableTransport,
 						oauthSession,
 						definition.name,
+						options.maxOAuthAttempts,
 					);
 					return {
 						client,
@@ -297,6 +336,7 @@ class McpRuntime implements Runtime {
 						sseTransport,
 						oauthSession,
 						definition.name,
+						options.maxOAuthAttempts,
 					);
 					return { client, transport: sseTransport, definition, oauthSession };
 				}

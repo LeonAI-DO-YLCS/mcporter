@@ -87,7 +87,6 @@ export async function loadServerDefinitions(
 	const rootDir = options.rootDir ?? process.cwd();
 	const configPath = resolveConfigPath(options.configPath, rootDir);
 	const config = await readConfigFile(configPath);
-	const baseDir = path.dirname(configPath);
 
 	const merged = new Map<string, { raw: RawEntry; baseDir: string }>();
 
@@ -111,7 +110,7 @@ export async function loadServerDefinitions(
 
 	for (const [name, entryRaw] of Object.entries(config.mcpServers)) {
 		const parsed = RawEntrySchema.parse(entryRaw);
-		merged.set(name, { raw: parsed, baseDir });
+		merged.set(name, { raw: parsed, baseDir: rootDir });
 	}
 
 	const servers: ServerDefinition[] = [];

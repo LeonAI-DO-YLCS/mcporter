@@ -60,20 +60,22 @@ const result = await callOnce({
 ## CLI Reference
 
 ```
-npx mcporter list                          # list all configured servers
+npx mcporter list                          # list all configured servers (non-blocking auth detection)
 npx mcporter list vercel --schema          # show tool signatures + schemas
+npx mcporter auth vercel                   # pre-authorize OAuth flows without listing tools
 npx mcporter call linear.searchIssues owner=ENG status=InProgress
 npx mcporter call signoz.query --tail-log  # print the tail of returned log files
 
 # Local scripts for workspace automation
 pnpm mcporter:list                                 # alias for mcporter list
 pnpm mcporter:call chrome-devtools.getTabs --tail-log
+pnpm mcporter:auth vercel                          # same as mcporter auth
 ```
 
-`pnpm mcporter:list` respects `MCP_LIST_TIMEOUT` (milliseconds, default `60000`). Export a higher value when you need to inspect slow-starting servers:
+`pnpm mcporter:list` respects `MCPORTER_LIST_TIMEOUT` (milliseconds, default `30000`). The aggregated view fans out in parallel and prints either the tool count or a short status (e.g., `auth required — run 'mcporter auth <name>'`). Export a higher timeout when you need to inspect slow-starting servers:
 
 ```
-MCP_LIST_TIMEOUT=120000 pnpm mcporter:list vercel
+MCPORTER_LIST_TIMEOUT=120000 pnpm mcporter:list vercel
 ```
 
 Common flags:

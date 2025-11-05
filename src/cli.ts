@@ -1,9 +1,28 @@
 #!/usr/bin/env node
 import fs from "node:fs";
+import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js";
 import { generateCli } from "./generate-cli.js";
 import { createRuntime } from "./runtime.js";
 
 type FlagMap = Partial<Record<string, string>>;
+
+function logInfo(message: string) {
+	// Log an info-level message with the standard prefix.
+	console.log(`[mcporter] ${message}`);
+}
+
+function logWarn(message: string) {
+	// Emit a warning with the standard prefix.
+	console.warn(`[mcporter] ${message}`);
+}
+
+function logError(message: string, error?: unknown) {
+	// Output an error message and optional error object.
+	console.error(`[mcporter] ${message}`);
+	if (error) {
+		console.error(error);
+	}
+}
 
 // main parses CLI flags and dispatches to list/call commands.
 async function main(): Promise<void> {
@@ -31,14 +50,23 @@ async function main(): Promise<void> {
 		rootDir: globalFlags["--root"],
 	});
 
-	if (command === "list") {
-		await handleList(runtime, argv);
-		return;
-	}
+	try {
+		if (command === "list") {
+			await handleList(runtime, argv);
+			return;
+		}
 
-	if (command === "call") {
-		await handleCall(runtime, argv);
-		return;
+		if (command === "call") {
+			await handleCall(runtime, argv);
+			return;
+		}
+
+		if (command === "auth") {
+			await handleAuth(runtime, argv);
+			return;
+		}
+	} finally {
+		await runtime.close().catch(() => {});
 	}
 
 	printHelp(`Unknown command '${command}'.`);
@@ -192,11 +220,12 @@ function expectValue(flag: string, value: string | undefined): string {
 }
 
 const LIST_TIMEOUT_MS = Number.parseInt(
-	process.env.MCP_LIST_TIMEOUT ?? "60000",
+	process.env.MCPORTER_LIST_TIMEOUT ?? "30000",
 	10,
 );
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+	// Race the original promise with a timeout to keep CLI responsive.
 	if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
 		return promise;
 	}
@@ -319,9 +348,76 @@ async function handleList(
 	const target = args.shift();
 
 	if (!target) {
-		for (const server of runtime.getDefinitions()) {
-			const description = server.description ? ` — ${server.description}` : "";
-			console.log(`- ${server.name}${description}`);
+		const servers = runtime.getDefinitions();
+		const perServerTimeoutMs = LIST_TIMEOUT_MS;
+		const perServerTimeoutSeconds = Math.round(perServerTimeoutMs / 1000);
+
+		if (servers.length === 0) {
+			console.log("No MCP servers configured.");
+			return;
+		}
+
+		console.log(
+			`Listing ${servers.length} server(s) (per-server timeout: ${perServerTimeoutSeconds}s)`,
+		);
+
+		const results = await Promise.all(
+			servers.map(async (server) => {
+				const startedAt = Date.now();
+				try {
+					const tools = await withTimeout(
+						runtime.listTools(server.name, { autoAuthorize: false }),
+						perServerTimeoutMs,
+					);
+					const durationMs = Date.now() - startedAt;
+					return {
+						server,
+						status: "ok" as const,
+						tools,
+						durationMs,
+					};
+				} catch (error) {
+					const durationMs = Date.now() - startedAt;
+					return {
+						server,
+						status: "error" as const,
+						error,
+						durationMs,
+					};
+				}
+			}),
+		);
+
+		for (const result of results) {
+			const description = result.server.description
+				? ` — ${result.server.description}`
+				: "";
+			const durationSeconds = (result.durationMs / 1000).toFixed(1);
+			if (result.status === "ok") {
+				const toolSuffix =
+					result.tools.length === 0
+						? "no tools reported"
+						: `${result.tools.length === 1 ? "1 tool" : `${result.tools.length} tools`}`;
+				console.log(
+					`- ${result.server.name}${description} (${toolSuffix}, ${durationSeconds}s)`,
+				);
+				continue;
+			}
+
+			const { error } = result;
+			let note: string;
+			if (error instanceof UnauthorizedError) {
+				note = `auth required — run 'mcporter auth ${result.server.name}' to complete the OAuth flow`;
+			} else if (error instanceof Error && error.message === "Timeout") {
+				note = `timed out after ${perServerTimeoutSeconds}s`;
+			} else if (error instanceof Error) {
+				note = error.message;
+			} else {
+				note = String(error);
+			}
+			console.log(
+				`- ${result.server.name}${description} (${note}, ${durationSeconds}s)`,
+			);
 		}
 		return;
 	}
@@ -533,6 +629,7 @@ function indent(text: string, pad: string): string {
 
 // tailLogIfRequested prints the final lines of any referenced log files.
 function tailLogIfRequested(result: unknown, enabled: boolean): void {
+	// Bail out immediately when tailing is disabled.
 	if (!enabled) {
 		return;
 	}
@@ -558,7 +655,7 @@ function tailLogIfRequested(result: unknown, enabled: boolean): void {
 
 	for (const candidate of candidates) {
 		if (!fs.existsSync(candidate)) {
-			console.warn(`[warn] Log path not found: ${candidate}`);
+			logWarn(`Log path not found: ${candidate}`);
 			continue;
 		}
 		try {
@@ -570,8 +667,8 @@ function tailLogIfRequested(result: unknown, enabled: boolean): void {
 				console.log(line);
 			}
 		} catch (error) {
-			console.warn(
-				`[warn] Failed to read log file ${candidate}: ${(error as Error).message}`,
+			logWarn(
+				`Failed to read log file ${candidate}: ${(error as Error).message}`,
 			);
 		}
 	}
@@ -589,6 +686,7 @@ Commands:
   list [name] [--schema]             List configured MCP servers (and tools for a server)
   call [selector] [flags]            Call a tool (selector like server.tool)
     --tail-log                       Tail log output when the tool returns a log file path
+  auth <name>                        Complete the OAuth flow for a server without listing tools
   generate-cli --server <ref>        Generate a standalone CLI
     --name <name>                    Supply a friendly name (otherwise inferred)
     --command <ref>                  MCP command or URL (required without --server)
@@ -606,6 +704,30 @@ Global flags:
 }
 
 main().catch((error) => {
-	console.error(error instanceof Error ? error.message : error);
+	const message = error instanceof Error ? error.message : String(error);
+	logError(message, error instanceof Error ? error : undefined);
 	process.exit(1);
 });
+async function handleAuth(
+	runtime: Awaited<ReturnType<typeof createRuntime>>,
+	args: string[],
+): Promise<void> {
+	const target = args.shift();
+	if (!target) {
+		throw new Error("Usage: mcporter auth <server>");
+	}
+
+	try {
+		// Kick off the interactive OAuth flow without blocking list output.
+		logInfo(`Initiating OAuth flow for '${target}'...`);
+		const tools = await runtime.listTools(target, { autoAuthorize: true });
+		logInfo(
+			`Authorization complete. ${tools.length} tool${
+				tools.length === 1 ? "" : "s"
+			} available.`,
+		);
+	} catch (error) {
+		const message = error instanceof Error ? error.message : String(error);
+		throw new Error(`Failed to authorize '${target}': ${message}`);
+	}
+}
