@@ -2,23 +2,25 @@
 import type { ChildProcess } from 'node:child_process';
 import fs from 'node:fs';
 import fsPromises from 'node:fs/promises';
-import os from 'node:os';
-import path from 'node:path';
-import { UnauthorizedError } from '@modelcontextprotocol/sdk/client/auth.js';
-import ora from 'ora';
+import { handleList } from './cli/list-command.js';
+import { formatSourceSuffix } from './cli/list-format.js';
+import { formatPathForDisplay } from './cli/path-utils.js';
+import { resolveCallTimeout, withTimeout } from './cli/timeouts.js';
 import type { CliArtifactMetadata, SerializedServerDefinition } from './cli-metadata.js';
 import { readCliMetadata } from './cli-metadata.js';
-import type { ServerDefinition, ServerSource } from './config.js';
 import { generateCli } from './generate-cli.js';
-import { createRuntime, type ServerToolInfo } from './runtime.js';
-import { createCallResult, type CallResult } from './result-utils.js';
 import {
   createPrefixedConsoleLogger,
+  type Logger,
+  type LogLevel,
   parseLogLevel,
   resolveLogLevelFromEnv,
-  type LogLevel,
-  type Logger,
 } from './logging.js';
+import { type CallResult, createCallResult } from './result-utils.js';
+import { createRuntime } from './runtime.js';
+
+export { extractListFlags, handleList } from './cli/list-command.js';
+export { resolveCallTimeout } from './cli/timeouts.js';
 
 type FlagMap = Partial<Record<string, string>>;
 type OutputFormat = 'auto' | 'text' | 'markdown' | 'json' | 'raw';
@@ -48,36 +50,6 @@ function logError(message: string, error?: unknown) {
   // Output an error message and optional error object.
   activeLogger.error(message, error);
 }
-
-const forceColorRaw = process.env.FORCE_COLOR?.toLowerCase();
-const forceDisableColor = forceColorRaw === '0' || forceColorRaw === 'false';
-const forceEnableColor =
-  forceColorRaw === '1' || forceColorRaw === 'true' || forceColorRaw === '2' || forceColorRaw === '3';
-const hasNoColor = process.env.NO_COLOR !== undefined;
-const stdoutStream = process.stdout as NodeJS.WriteStream | undefined;
-const supportsAnsiColor =
-  !hasNoColor && (forceEnableColor || (!forceDisableColor && Boolean(stdoutStream?.isTTY)));
-const isCI = Boolean(process.env.CI && process.env.CI !== '0' && process.env.CI.toLowerCase() !== 'false');
-const spinnerDisabled = process.env.MCPORTER_NO_SPINNER === '1';
-const supportsSpinner = Boolean(stdoutStream?.isTTY && !isCI && !spinnerDisabled);
-
-// colorize wraps a string in ANSI color codes when output supports them.
-function colorize(code: number, text: string): string {
-  if (!supportsAnsiColor) {
-    return text;
-  }
-  return `\u001B[${code}m${text}\u001B[0m`;
-}
-
-const dimText = (text: string): string => colorize(90, text);
-const yellowText = (text: string): string => colorize(33, text);
-const redText = (text: string): string => colorize(31, text);
-const extraDimText = (text: string): string => {
-  if (!supportsAnsiColor) {
-    return text;
-  }
-  return `\u001B[38;5;244m${text}\u001B[0m`;
-};
 
 // main parses CLI flags and dispatches to list/call commands.
 async function main(): Promise<void> {
@@ -331,55 +303,7 @@ function expectValue(flag: string, value: string | undefined): string {
   return value;
 }
 
-const DEFAULT_LIST_TIMEOUT_MS = 30_000;
-const DEFAULT_CALL_TIMEOUT_MS = 60_000;
 const DEBUG_HANG = process.env.MCPORTER_DEBUG_HANG === '1';
-
-// parseTimeout reads timeout values from strings while honoring defaults.
-function parseTimeout(raw: string | undefined, fallback: number): number {
-  if (!raw) {
-    return fallback;
-  }
-  const parsed = Number.parseInt(raw, 10);
-  if (!Number.isFinite(parsed) || parsed <= 0) {
-    return fallback;
-  }
-  return parsed;
-}
-
-const LIST_TIMEOUT_MS = parseTimeout(process.env.MCPORTER_LIST_TIMEOUT, DEFAULT_LIST_TIMEOUT_MS);
-
-// resolveCallTimeout decides the call timeout based on environment overrides.
-export function resolveCallTimeout(override?: number): number {
-  if (typeof override === 'number' && Number.isFinite(override) && override > 0) {
-    return override;
-  }
-  return parseTimeout(process.env.MCPORTER_CALL_TIMEOUT, DEFAULT_CALL_TIMEOUT_MS);
-}
-
-// withTimeout races a promise against a timeout to avoid hangs.
-function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
-  // Race the original promise with a timeout to keep CLI responsive.
-  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
-    return promise;
-  }
-  return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(() => {
-      reject(new Error('Timeout'));
-    }, timeoutMs);
-
-    promise.then(
-      (value) => {
-        clearTimeout(timer);
-        resolve(value);
-      },
-      (error) => {
-        clearTimeout(timer);
-        reject(error);
-      }
-    );
-  });
-}
 
 // handleGenerateCli parses flags and generates the requested standalone CLI.
 async function handleGenerateCli(args: string[], globalFlags: FlagMap): Promise<void> {
@@ -727,215 +651,6 @@ function inferNameFromCommand(command: string): string | undefined {
   return candidate.replace(/\.[a-z0-9]+$/i, '');
 }
 
-// handleList prints configured servers and optional tool metadata.
-export async function handleList(runtime: Awaited<ReturnType<typeof createRuntime>>, args: string[]): Promise<void> {
-  const flags = extractListFlags(args);
-  const target = args.shift();
-
-  if (!target) {
-    const servers = runtime.getDefinitions();
-    const perServerTimeoutMs = flags.timeoutMs ?? LIST_TIMEOUT_MS;
-    const perServerTimeoutSeconds = Math.round(perServerTimeoutMs / 1000);
-
-    if (servers.length === 0) {
-      console.log('No MCP servers configured.');
-      return;
-    }
-
-    console.log(`Listing ${servers.length} server(s) (per-server timeout: ${perServerTimeoutSeconds}s)`);
-    const spinner = supportsSpinner ? ora(`Discovering ${servers.length} server(s)…`).start() : undefined;
-    const spinnerActive = Boolean(spinner);
-    const renderedResults: Array<{ line: string; summary: string } | undefined> = new Array(servers.length);
-    let completedCount = 0;
-
-    const tasks = servers.map((server, index) =>
-      (async (): Promise<ListSummaryResult> => {
-        const startedAt = Date.now();
-        try {
-          const tools = await withTimeout(
-            runtime.listTools(server.name, { autoAuthorize: false }),
-            perServerTimeoutMs
-          );
-          return {
-            server,
-            status: 'ok' as const,
-            tools,
-            durationMs: Date.now() - startedAt,
-          };
-        } catch (error) {
-          return {
-            server,
-            status: 'error' as const,
-            error,
-            durationMs: Date.now() - startedAt,
-          };
-        }
-      })().then((result) => {
-        const rendered = renderServerListRow(result, perServerTimeoutMs);
-        renderedResults[index] = rendered;
-        completedCount += 1;
-
-        if (spinnerActive && spinner) {
-          spinner.stop();
-          console.log(rendered.line);
-          const remaining = servers.length - completedCount;
-          if (remaining > 0) {
-            // Keep the spinner focused on progress instead of replaying the last completed server.
-            spinner.text = `Listing servers… ${completedCount}/${servers.length} · remaining: ${remaining}`;
-            spinner.start();
-          }
-        } else {
-          console.log(rendered.line);
-        }
-
-        return result;
-      })
-    );
-
-    await Promise.all(tasks);
-
-    type StatusCategory = 'ok' | 'auth' | 'offline' | 'error';
-    const errorCounts: Record<StatusCategory, number> = {
-      ok: 0,
-      auth: 0,
-      offline: 0,
-      error: 0,
-    };
-    const authRecommendations: Array<{ server: string; command: string }> = [];
-    renderedResults.forEach((entry, index) => {
-      if (!entry) {
-        return;
-      }
-      const category = (entry as { category?: StatusCategory }).category ?? 'error';
-      errorCounts[category] = (errorCounts[category] ?? 0) + 1;
-      if (category === 'auth') {
-        const authCommand = (entry as { authCommand?: string }).authCommand;
-        if (!authCommand) {
-          return;
-        }
-        const serverDefinition = servers[index];
-        const serverLabel = serverDefinition?.name ?? 'unknown';
-        authRecommendations.push({ server: serverLabel, command: authCommand });
-      }
-    });
-    if (spinnerActive && spinner) {
-      spinner.stop();
-    }
-    const okSummary = `${errorCounts.ok} healthy`;
-    const parts = [
-      okSummary,
-      ...(errorCounts.auth > 0 ? [`${errorCounts.auth} auth required`] : []),
-      ...(errorCounts.offline > 0 ? [`${errorCounts.offline} offline`] : []),
-      ...(errorCounts.error > 0 ? [`${errorCounts.error} errors`] : []),
-    ];
-    console.log(`✔ Listed ${servers.length} server${servers.length === 1 ? '' : 's'} (${parts.join('; ')}).`);
-
-    if (authRecommendations.length > 0) {
-      console.log('');
-      console.log('Next steps:');
-      const seen = new Set<string>();
-      for (const recommendation of authRecommendations) {
-        if (seen.has(recommendation.command)) {
-          continue;
-        }
-        seen.add(recommendation.command);
-        console.log(`  • ${recommendation.server ?? 'the server'} — run '${recommendation.command}'`);
-      }
-    }
-    return;
-  }
-
-  const definition = runtime.getDefinition(target);
-  const timeoutMs = flags.timeoutMs ?? LIST_TIMEOUT_MS;
-  const sourcePath = formatSourceSuffix(definition.source, true);
-    console.log(`- ${target}`);
-    if (sourcePath) {
-      console.log(`  Source: ${sourcePath}`);
-    }
-  try {
-    const tools = await withTimeout(runtime.listTools(target, { includeSchema: flags.schema }), timeoutMs);
-    if (tools.length === 0) {
-      console.log('  Tools: <none>');
-      return;
-    }
-    console.log('  Tools:');
-    for (const tool of tools) {
-      const doc = tool.description ? `: ${tool.description}` : '';
-      console.log(`    - ${tool.name}${doc}`);
-      if (flags.schema && tool.inputSchema) {
-        console.log(indent(JSON.stringify(tool.inputSchema, null, 2), '      '));
-      }
-    }
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Failed to load tool list.';
-    const timeoutMs = flags.timeoutMs ?? LIST_TIMEOUT_MS;
-    console.warn(`  Tools: <timed out after ${timeoutMs}ms>`);
-    console.warn(`  Reason: ${message}`);
-  }
-}
-
-type ListSummaryResult =
-  | {
-      status: 'ok';
-      server: ServerDefinition;
-      tools: ServerToolInfo[];
-      durationMs: number;
-    }
-  | {
-      status: 'error';
-      server: ServerDefinition;
-      error: unknown;
-      durationMs: number;
-    };
-
-// renderServerListRow formats list output for a single server result.
-type StatusCategory = 'ok' | 'auth' | 'offline' | 'error';
-
-function renderServerListRow(
-  result: ListSummaryResult,
-  timeoutMs: number
-): {
-  line: string;
-  summary: string;
-  category: StatusCategory;
-  authCommand?: string;
-} {
-  const description = result.server.description
-    ? dimText(` — ${result.server.description}`)
-    : '';
-  const durationLabel = dimText(`${(result.durationMs / 1000).toFixed(1)}s`);
-  const sourceSuffix = formatSourceSuffix(result.server.source);
-  const prefix = `- ${result.server.name}${description}`;
-
-  if (result.status === 'ok') {
-    const toolSuffix =
-      result.tools.length === 0
-        ? 'no tools reported'
-        : `${result.tools.length === 1 ? '1 tool' : `${result.tools.length} tools`}`;
-    return {
-      line: `${prefix} (${toolSuffix}, ${durationLabel})${sourceSuffix}`,
-      summary: toolSuffix,
-      category: 'ok',
-    };
-  }
-
-  const timeoutSeconds = Math.round(timeoutMs / 1000);
-  const advice = classifyListError(result.error, result.server.name, timeoutSeconds);
-  return {
-    line: `${prefix} (${advice.colored}, ${durationLabel})${sourceSuffix}`,
-    summary: advice.summary,
-    category: advice.category,
-    authCommand: advice.authCommand,
-  };
-}
-
-function truncateForSpinner(text: string, maxLength = 72): string {
-  if (text.length <= maxLength) {
-    return text;
-  }
-  return `${text.slice(0, Math.max(0, maxLength - 1))}…`;
-}
-
 // handleCall invokes a tool, prints JSON, and optionally tails logs.
 // handleCall invokes a tool, prints the response, and optionally tails logs.
 export async function handleCall(runtime: Awaited<ReturnType<typeof createRuntime>>, args: string[]): Promise<void> {
@@ -1032,7 +747,6 @@ function printCallOutput<T>(wrapped: CallResult<T>, raw: T, format: OutputFormat
       printRaw(raw);
       return;
     }
-    case 'auto':
     default: {
       const jsonValue = wrapped.json();
       if (jsonValue !== null && attemptPrintJson(jsonValue)) {
@@ -1098,120 +812,6 @@ function printRaw(raw: unknown): void {
   }
 }
 
-// extractListFlags captures list-specific options such as --schema.
-export function extractListFlags(args: string[]): { schema: boolean; timeoutMs?: number } {
-  let schema = false;
-  let timeoutMs: number | undefined;
-  let index = 0;
-  while (index < args.length) {
-    const token = args[index];
-    if (token === '--schema') {
-      schema = true;
-      args.splice(index, 1);
-      continue;
-    }
-    if (token === '--timeout') {
-      const value = args[index + 1];
-      if (!value) {
-        throw new Error("Flag '--timeout' requires a value.");
-      }
-      const parsed = Number.parseInt(value, 10);
-      if (!Number.isFinite(parsed) || parsed <= 0) {
-        throw new Error('--timeout must be a positive integer (milliseconds).');
-      }
-      timeoutMs = parsed;
-      args.splice(index, 2);
-      continue;
-    }
-    index += 1;
-  }
-  return { schema, timeoutMs };
-}
-
-// formatSourceSuffix pretty-prints the origin of a server definition.
-function formatSourceSuffix(source: ServerSource | undefined, inline = false): string {
-  if (!source || source.kind !== 'import') {
-    return '';
-  }
-  const formatted = formatPathForDisplay(source.path);
-  const text = inline ? formatted : `[source: ${formatted}]`;
-  const tinted = extraDimText(text);
-  return inline ? tinted : ` ${tinted}`;
-}
-
-function classifyListError(
-  error: unknown,
-  serverName: string,
-  timeoutSeconds: number
-): {
-  colored: string;
-  summary: string;
-  category: StatusCategory;
-  authCommand?: string;
-} {
-  if (error instanceof UnauthorizedError) {
-    const note = yellowText(`auth required — run 'mcporter auth ${serverName}'`);
-    return { colored: note, summary: 'auth required', category: 'auth', authCommand: `mcporter auth ${serverName}` };
-  }
-
-  const rawMessage =
-    error instanceof Error
-      ? error.message
-      : typeof error === 'string'
-        ? error
-        : JSON.stringify(error) ?? '';
-  const normalized = rawMessage.toLowerCase();
-  // Pull out HTTP status codes that appear in the structured SDK errors (e.g., "status code (401)").
-  const statusMatch = rawMessage.match(/status code\s*\((\d{3})\)/i);
-  // Guard optional capture groups before parsing so TypeScript stays happy under --strictNullChecks.
-  const statusCodeText = statusMatch?.[1];
-  const statusCode = statusCodeText ? Number.parseInt(statusCodeText, 10) : undefined;
-  const authStatuses = new Set([401, 403, 405]);
-
-  if (
-    authStatuses.has(statusCode ?? -1) ||
-    normalized.includes('401') ||
-    normalized.includes('unauthorized') ||
-    normalized.includes('invalid_token') ||
-    normalized.includes('forbidden')
-  ) {
-    const note = yellowText(`auth required — run 'mcporter auth ${serverName}'`);
-    return { colored: note, summary: 'auth required', category: 'auth', authCommand: `mcporter auth ${serverName}` };
-  }
-
-  if (
-    normalized.includes('fetch failed') ||
-    normalized.includes('econnrefused') ||
-    normalized.includes('connection refused') ||
-    normalized.includes('connection closed') ||
-    normalized.includes('connection reset') ||
-    normalized.includes('socket hang up') ||
-    normalized.includes('connect timeout') ||
-    normalized.includes('network is unreachable') ||
-    normalized.includes('timed out') ||
-    normalized.includes('timeout') ||
-    normalized.includes('timeout after')
-  ) {
-    // Treat transport-layer disconnects as offline so the summary stays actionable instead of echoing low-level errors.
-    const note = redText(`offline — unable to reach server`);
-    return { colored: note, summary: 'offline', category: 'offline' };
-  }
-
-  const note = redText(rawMessage || 'unknown error');
-  return { colored: note, summary: rawMessage || 'unknown error', category: 'error' };
-}
-
-// formatPathForDisplay rewrites absolute paths into user-friendly display strings.
-function formatPathForDisplay(filePath: string): string {
-  const cwd = process.cwd();
-  const relative = path.relative(cwd, filePath);
-  const displayPath =
-    relative && !relative.startsWith('..') && !path.isAbsolute(relative)
-      ? relative
-      : filePath.replace(os.homedir(), '~');
-  return displayPath;
-}
-
 // describeHandle produces readable metadata for active handles in debug output.
 function describeHandle(handle: unknown): string {
   if (!handle || (typeof handle !== 'object' && typeof handle !== 'function')) {
@@ -1220,7 +820,12 @@ function describeHandle(handle: unknown): string {
   const ctor = (handle as { constructor?: { name?: string } }).constructor?.name ?? typeof handle;
   if (ctor === 'Socket') {
     try {
-      const socket = handle as { localAddress?: string; localPort?: number; remoteAddress?: string; remotePort?: number };
+      const socket = handle as {
+        localAddress?: string;
+        localPort?: number;
+        remoteAddress?: string;
+        remotePort?: number;
+      };
       const parts: string[] = ['Socket'];
       if (socket.localAddress) {
         parts.push(`local=${socket.localAddress}:${socket.localPort ?? '?'}`);
@@ -1238,11 +843,11 @@ function describeHandle(handle: unknown): string {
       if (host) {
         parts.push(`host=${host}`);
       }
-    const pipeName = (handle as { path?: string }).path;
-    if (pipeName) {
-      parts.push(`path=${pipeName}`);
-    }
-    const extraKeys = Reflect.ownKeys(handle as Record<string | symbol, unknown>)
+      const pipeName = (handle as { path?: string }).path;
+      if (pipeName) {
+        parts.push(`path=${pipeName}`);
+      }
+      const extraKeys = Reflect.ownKeys(handle as Record<string | symbol, unknown>)
         .filter((key) => typeof key === 'string' && key.startsWith('_') && !['_events', '_eventsCount'].includes(key))
         .slice(0, 4) as string[];
       if (extraKeys.length > 0) {
@@ -1393,10 +998,10 @@ export function parseCallArguments(args: string[]): CallArgsParseResult {
     if (token === '--output') {
       const value = args[index + 1];
       if (!value) {
-        throw new Error("--output requires a format (auto|text|markdown|json|raw).");
+        throw new Error('--output requires a format (auto|text|markdown|json|raw).');
       }
       if (!isOutputFormat(value)) {
-        throw new Error("--output format must be one of: auto, text, markdown, json, raw.");
+        throw new Error('--output format must be one of: auto, text, markdown, json, raw.');
       }
       result.output = value;
       args.splice(index, 2);
@@ -1503,14 +1108,6 @@ function coerceValue(value: string): unknown {
     }
   }
   return trimmed;
-}
-
-// indent adds consistent left padding when printing nested JSON.
-function indent(text: string, pad: string): string {
-  return text
-    .split('\n')
-    .map((line) => pad + line)
-    .join('\n');
 }
 
 // tailLogIfRequested prints the final lines of any referenced log files.
