@@ -23,6 +23,44 @@ const stripAnsi = (value: string): string => {
   return result;
 };
 
+const linearDefinition: ServerDefinition = {
+  name: 'linear',
+  description: 'Hosted Linear MCP',
+  command: { kind: 'http', url: new URL('https://example.com/mcp') },
+};
+
+const buildLinearDocumentsTool = (includeSchema?: boolean) => ({
+  name: 'list_documents',
+  description: "List documents in the user's Linear workspace",
+  inputSchema: includeSchema
+    ? {
+        type: 'object',
+        properties: {
+          query: { type: 'string', description: 'The search query' },
+          limit: { type: 'number', description: 'Maximum number of documents to return' },
+          before: { type: 'string', description: 'Cursor to page backwards' },
+          after: { type: 'string', description: 'Cursor to page forwards' },
+          orderBy: {
+            type: 'string',
+            description: 'Sort order for the documents',
+            enum: ['createdAt', 'updatedAt'],
+          },
+          projectId: { type: 'string', description: 'Filter by project' },
+          initiativeId: { type: 'string', description: 'Filter by initiative' },
+          creatorId: { type: 'string', description: 'Filter by creator' },
+          includeArchived: { type: 'boolean', description: 'Whether to include archived documents' },
+        },
+        required: ['query'],
+      }
+    : undefined,
+  outputSchema: includeSchema
+    ? {
+        title: 'DocumentConnection',
+        type: 'object',
+      }
+    : undefined,
+});
+
 describe('CLI list timeout handling', () => {
   it('parses --timeout flag into list flags', async () => {
     const { extractListFlags } = await cliModulePromise;
@@ -212,20 +250,45 @@ describe('CLI list classification', () => {
     expect(detailLine).toMatch(/1 tool/);
     expect(detailLine).toMatch(/ms/);
     expect(detailLine).toContain('HTTP https://example.com/mcp');
-    expect(lines.some((line) => line.includes('// Add two numbers'))).toBe(true);
-    expect(lines.some((line) => line.includes('add(a: number'))).toBe(true);
-    expect(lines.some((line) => line.includes('First operand'))).toBe(true);
-    expect(lines.some((line) => line.includes('format?:'))).toBe(false);
-    expect(lines.some((line) => line.includes('dueBefore?:'))).toBe(false);
-    expect(lines.some((line) => line.includes('// optional (2): format, dueBefore'))).toBe(true);
-    expect(lines.some((line) => line.includes('-> result:'))).toBe(true);
-    expect(lines.some((line) => line.includes('-> total:'))).toBe(true);
+    expect(lines.some((line) => line.includes('/**'))).toBe(true);
+    expect(lines.some((line) => line.includes('@param a') && line.includes('First operand'))).toBe(true);
+    expect(lines.some((line) => line.includes('function add('))).toBe(true);
+    expect(lines.some((line) => line.includes('format?: "json" | "markdown"'))).toBe(true);
+    expect(lines.some((line) => line.includes('dueBefore?: string'))).toBe(true);
+    expect(lines.some((line) => line.includes('// optional'))).toBe(false);
     expect(lines.some((line) => line.includes('Examples:'))).toBe(true);
-    expect(lines.some((line) => line.includes('mcporter call calculator.add(a: 1)'))).toBe(true);
+    expect(lines.some((line) => line.includes('mcporter call calculator.add(a: 1'))).toBe(true);
+    expect(
+      lines.some((line) => line.includes('Optional parameters hidden; run with --include-optional to view all fields'))
+    ).toBe(false);
+    expect(listToolsSpy).toHaveBeenCalledWith('calculator', { includeSchema: true });
+
+    logSpy.mockRestore();
+  });
+
+  it('summarizes hidden optional parameters and hints include flag', async () => {
+    const { handleList } = await cliModulePromise;
+    const listToolsSpy = vi.fn((_name: string, options?: { includeSchema?: boolean }) =>
+      Promise.resolve([buildLinearDocumentsTool(options?.includeSchema)])
+    );
+    const runtime = {
+      getDefinition: () => linearDefinition,
+      listTools: listToolsSpy,
+    } as unknown as Awaited<ReturnType<typeof import('../src/runtime.js')['createRuntime']>>;
+
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    await handleList(runtime, ['linear']);
+
+    const lines = logSpy.mock.calls.map((call) => stripAnsi(call.join(' ')));
+    expect(lines.some((line) => line.includes('function list_documents('))).toBe(true);
+    expect(lines.some((line) => line.includes('// optional (8): limit, before, after, orderBy, projectId, ...'))).toBe(
+      true
+    );
     expect(
       lines.some((line) => line.includes('Optional parameters hidden; run with --include-optional to view all fields'))
     ).toBe(true);
-    expect(listToolsSpy).toHaveBeenCalledWith('calculator', { includeSchema: true });
+    expect(listToolsSpy).toHaveBeenCalledWith('linear', { includeSchema: true });
 
     logSpy.mockRestore();
   });
@@ -233,51 +296,34 @@ describe('CLI list classification', () => {
   it('includes optional parameters when --include-optional is set', async () => {
     const { handleList } = await cliModulePromise;
     const listToolsSpy = vi.fn((_name: string, options?: { includeSchema?: boolean }) =>
-      Promise.resolve([
-        {
-          name: 'add',
-          description: 'Add two numbers',
-          inputSchema: options?.includeSchema
-            ? {
-                type: 'object',
-                properties: {
-                  a: { type: 'number', description: 'First operand' },
-                  format: { type: 'string', enum: ['json', 'markdown'], description: 'Output serialization format' },
-                  dueBefore: { type: 'string', format: 'date-time', description: 'ISO 8601 timestamp' },
-                },
-                required: ['a'],
-              }
-            : undefined,
-        },
-      ])
+      Promise.resolve([buildLinearDocumentsTool(options?.includeSchema)])
     );
     const runtime = {
-      getDefinition: (name: string) => ({
-        name,
-        description: 'Test integration server',
-        command: { kind: 'http', url: new URL('https://example.com/mcp') },
-      }),
+      getDefinition: () => linearDefinition,
       listTools: listToolsSpy,
     } as unknown as Awaited<ReturnType<typeof import('../src/runtime.js')['createRuntime']>>;
 
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
-    await handleList(runtime, ['--include-optional', 'calculator']);
+    await handleList(runtime, ['--include-optional', 'linear']);
 
     const lines = logSpy.mock.calls.map((call) => stripAnsi(call.join(' ')));
 
-    const headerLine = lines.find((line) => line.trim().startsWith('calculator -'));
+    const headerLine = lines.find((line) => line.trim().startsWith('linear -'));
     expect(headerLine).toBeDefined();
     const detailLine = lines[lines.indexOf(headerLine as string) + 1] ?? '';
     expect(detailLine).toMatch(/1 tool/);
     expect(detailLine).toMatch(/ms/);
     expect(detailLine).toContain('HTTP https://example.com/mcp');
-    expect(lines.some((line) => line.includes('add({'))).toBe(true);
-    expect(lines.some((line) => line.includes('a: number') && line.includes('First operand'))).toBe(true);
-    expect(lines.some((line) => line.includes('format?: "json" | "markdown"'))).toBe(true);
-    expect(lines.some((line) => line.includes('dueBefore?: string'))).toBe(true);
-    expect(lines.some((line) => line.includes('mcporter call calculator.add(a: 1, format: "json")'))).toBe(true);
-    expect(listToolsSpy).toHaveBeenCalledWith('calculator', { includeSchema: true });
+    expect(lines.some((line) => line.includes('/**'))).toBe(true);
+    expect(lines.some((line) => line.includes('@param limit?') && line.includes('Maximum number of documents'))).toBe(
+      true
+    );
+    expect(lines.some((line) => line.includes('function list_documents('))).toBe(true);
+    expect(lines.some((line) => line.includes('limit?: number'))).toBe(true);
+    expect(lines.some((line) => line.includes('orderBy?: "createdAt" | "updatedAt"'))).toBe(true);
+    expect(lines.some((line) => line.includes('includeArchived?: boolean'))).toBe(true);
+    expect(listToolsSpy).toHaveBeenCalledWith('linear', { includeSchema: true });
 
     logSpy.mockRestore();
   });

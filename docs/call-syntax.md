@@ -11,25 +11,28 @@ Both forms share the same validation pipeline, so required parameters, enums, an
 
 ## Reading the CLI Signatures
 
-`mcporter list <server>` now prints each tool like a mini TypeScript snippet:
+`mcporter list <server>` prints each tool as a compact TypeScript declaration:
 
 ```ts
-// Create a comment on a specific Linear issue
-create_comment({
-  issueId: string              // The issue ID
-  body: string                 // The content of the comment as Markdown
-  parentId?: string            // A parent comment ID to reply to
-})
-  -> result: array             // List of calculation results (falls back to `unknown` when unspecified)
-  -> total: number             // Total results returned
+/**
+ * Create a comment on a specific Linear issue.
+ * @param issueId The issue ID
+ * @param body The content of the comment as Markdown
+ * @param parentId? A parent comment ID to reply to
+ */
+function create_comment(issueId: string, body: string, parentId?: string): Comment;
+// optional (3): notifySubscribers, labelIds, mentionIds, ...
 ```
 
-- Required parameters appear without `?`, optional parameters use `?`.
-- Literal unions (enums) render as `"json" | "markdown"`.
-- Known formats (e.g. ISO 8601) surface inline: `dueDate?: string /* ISO 8601 */`.
-- Each parameter’s schema description is shown as a dimmed `//` comment to match the CLI styling.
-- Return values are summarised with `->` lines derived from the tool’s output schema; when no schema is available we emit `-> result: unknown` as a fallback.
-- After the tool list you’ll see an `Examples:` block with a few ready-to-run calls; the legacy flag form is still accepted but no longer printed for every tool.
+Key details:
+
+- Doc blocks use `@param` lines so every parameter description (even optional ones) stays in view.
+- Required parameters appear without `?`; optional parameters use `?` and inherit enum literals (e.g. `"json" | "markdown"`).
+- Known format hints are appended inline: `dueDate?: string /* ISO 8601 */` (we suppress the hint when the description already calls it out).
+- When a tool exposes more than two optional parameters (or has ≥4 required parameters), the default output hides the extras and replaces them with an inline summary like `// optional (8): limit, before, after, orderBy, projectId, ...`.
+- Run `mcporter list <server> --include-optional` whenever you want the full signature; the footer repeats `Optional parameters hidden; run with --include-optional to view all fields.` any time truncation occurs.
+- Return types come from each tool’s output schema, so you’ll see concrete names when providers include `title` metadata (e.g. `DocumentConnection`). When no schema is advertised we omit the `: Type` suffix entirely instead of showing `unknown`.
+- Each server concludes with a short `Examples:` block that mirrors the preferred function-call syntax.
 
 ## Function-Call Syntax Details
 

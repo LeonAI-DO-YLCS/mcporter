@@ -364,164 +364,117 @@ function printToolDetail(
   requiredOnly: boolean
 ): ToolDetailResult {
   const options = extractOptions(tool as ServerToolInfo);
-  const visibleOptions = requiredOnly ? options.filter((entry) => entry.required) : options;
-  const lines = formatToolSignatureBlock(tool.name, tool.description ?? '', visibleOptions, options, requiredOnly);
-  for (const line of lines) {
-    console.log(`  ${line}`);
+  const { displayOptions, hiddenOptions } = selectDisplayOptions(options, requiredOnly);
+  const docLines = buildDocComment(tool.description, options);
+  if (docLines) {
+    for (const line of docLines) {
+      console.log(`  ${line}`);
+    }
+  }
+  console.log(`  ${formatFunctionSignature(tool.name, displayOptions, tool.outputSchema)}`);
+  if (hiddenOptions.length > 0 && requiredOnly) {
+    console.log(`  ${formatOptionalSummary(hiddenOptions)}`);
   }
 
   if (includeSchema && tool.inputSchema) {
     // Schemas can be large — indenting keeps multi-line JSON legible without disrupting surrounding output.
     console.log(indent(JSON.stringify(tool.inputSchema, null, 2), '      '));
   }
-  const returnLines = formatReturnLines(tool.outputSchema);
-  if (returnLines && returnLines.length > 0) {
-    for (const line of returnLines) {
-      console.log(`  ${line}`);
-    }
-  }
   console.log('');
   return {
-    example: formatCallExpressionExample(serverName, tool.name, visibleOptions.length > 0 ? visibleOptions : options),
-    optionalOmitted: requiredOnly && options.length > visibleOptions.length,
+    example: formatCallExpressionExample(serverName, tool.name, displayOptions.length > 0 ? displayOptions : options),
+    optionalOmitted: hiddenOptions.length > 0,
   };
 }
 
-function formatToolSignatureBlock(
-  name: string,
-  description: string,
-  visibleOptions: GeneratedOption[],
-  allOptions: GeneratedOption[],
+
+function selectDisplayOptions(
+  options: GeneratedOption[],
   requiredOnly: boolean
-): string[] {
-  const lines: string[] = [];
-  if (description) {
-    lines.push(extraDimText(`// ${description}`));
+): { displayOptions: GeneratedOption[]; hiddenOptions: GeneratedOption[] } {
+  if (!requiredOnly) {
+    return { displayOptions: options, hiddenOptions: [] };
   }
-  const omittedOptions = requiredOnly ? allOptions.filter((entry) => !entry.required) : [];
-  const optionalNote = formatOptionalNote(omittedOptions);
-
-  const inlineEligible = isInlineFriendly(visibleOptions, optionalNote);
-
-  if (inlineEligible) {
-    const signature = buildInlineSignature(name, visibleOptions);
-    lines.push(optionalNote ? `${signature} ${optionalNote}` : signature);
-    return lines;
+  const requiredCount = options.filter((option) => option.required).length;
+  const optionalCount = options.length - requiredCount;
+  const includeOptional = optionalCount > 0 && optionalCount <= 2 && requiredCount < 4;
+  const displayOptions: GeneratedOption[] = [];
+  const hiddenOptions: GeneratedOption[] = [];
+  for (const option of options) {
+    if (option.required || includeOptional) {
+      displayOptions.push(option);
+    } else {
+      hiddenOptions.push(option);
+    }
   }
-
-  if (visibleOptions.length === 0) {
-    const signature = requiredOnly && allOptions.length > 0 ? `${cyanText(name)}({})` : `${cyanText(name)}()`;
-    lines.push(optionalNote ? `${signature} ${optionalNote}` : signature);
-    return lines;
-  }
-
-  lines.push(`${cyanText(name)}({`);
-  for (const option of visibleOptions) {
-    lines.push(`  ${formatParameterSignature(option)}`);
-  }
-  const closing = optionalNote ? `}) ${optionalNote}` : '})';
-  lines.push(closing);
-  return lines;
+  return { displayOptions, hiddenOptions };
 }
 
-function isInlineFriendly(options: GeneratedOption[], optionalNote: string | undefined): boolean {
-  if (options.length === 0) {
-    return true;
-  }
-  if (options.length > 2) {
-    return false;
-  }
-  return options.every((option) => {
-    const commentLength = option.description?.length ?? 0;
-    return commentsFitsInline(commentLength) && !option.enumValues && option.type !== 'array';
-  });
-}
-
-function commentsFitsInline(length: number, max = 60): boolean {
-  return length <= max;
-}
-
-function buildInlineSignature(name: string, options: GeneratedOption[]): string {
-  if (options.length === 0) {
-    return `${cyanText(name)}()`;
-  }
-  const parts = options.map((option) => {
-    const typeAnnotation = formatTypeAnnotation(option);
-    const optionalSuffix = option.required ? '' : '?';
-    const commentSuffix = option.description ? `  ${extraDimText(`// ${option.description}`)}` : '';
-    return `${option.property}${optionalSuffix}: ${typeAnnotation}${commentSuffix}`;
-  });
-  if (options.length === 1) {
-    return `${cyanText(name)}(${parts[0]})`;
-  }
-  return `${cyanText(name)}({ ${parts.join(', ')} })`;
-}
-
-function formatOptionalNote(omittedOptions: GeneratedOption[], includeAll: boolean): string | undefined {
-  if (omittedOptions.length === 0) {
+function buildDocComment(description: string | undefined, options: GeneratedOption[]): string[] | undefined {
+  const descriptionLines = description?.trim().split(/\r?\n/) ?? [];
+  const paramDocs = options.filter((option) => option.description);
+  if (descriptionLines.length === 0 && paramDocs.length === 0) {
     return undefined;
   }
-  if (includeAll) {
-    return undefined;
+  const lines: string[] = ['/**'];
+  for (const line of descriptionLines) {
+    if (line.trim().length > 0) {
+      lines.push(` * ${line.trimEnd()}`);
+    }
   }
-  const names = omittedOptions.map((option) => option.property);
-  const truncated = names.length > 5 ? [...names.slice(0, 5), '…'] : names;
-  return extraDimText(`// optional (${names.length}): ${truncated.join(', ')}`);
+  for (const option of paramDocs) {
+    const descriptionLines = option.description?.split(/\r?\n/) ?? [''];
+    descriptionLines.forEach((entry, index) => {
+      const suffix = entry.trimEnd();
+      if (index === 0) {
+        lines.push(` * @param ${option.property}${option.required ? '' : '?'} ${suffix}`);
+        return;
+      }
+      if (suffix.length > 0) {
+        lines.push(` *   ${suffix}`);
+      }
+    });
+  }
+  lines.push(' */');
+  return lines.map((line) => extraDimText(line));
 }
 
-function formatReturnLines(schema: unknown): string[] | undefined {
+function formatFunctionSignature(name: string, options: GeneratedOption[], outputSchema: unknown): string {
+  const paramsText = options.map(formatInlineParameter).join(', ');
+  const returnType = inferReturnTypeName(outputSchema);
+  const signature = `${cyanText(`function ${name}`)}(${paramsText})`;
+  return returnType ? `${signature}: ${returnType};` : `${signature};`;
+}
+
+function formatInlineParameter(option: GeneratedOption): string {
+  const typeAnnotation = formatTypeAnnotation(option);
+  const optionalSuffix = option.required ? '' : '?';
+  return `${option.property}${optionalSuffix}: ${typeAnnotation}`;
+}
+
+function formatOptionalSummary(hiddenOptions: GeneratedOption[]): string {
+  const maxNames = 5;
+  const names = hiddenOptions.map((option) => option.property);
+  if (names.length === 0) {
+    return '';
+  }
+  const preview = names.slice(0, maxNames).join(', ');
+  const suffix = names.length > maxNames ? ', ...' : '';
+  return extraDimText(`// optional (${names.length}): ${preview}${suffix}`);
+}
+
+function inferReturnTypeName(schema: unknown): string | undefined {
   if (!schema || typeof schema !== 'object') {
     return undefined;
   }
-  const record = schema as Record<string, unknown>;
-  const type = typeof record.type === 'string' ? (record.type as string) : undefined;
-
-  if (type === 'object' || (!type && typeof record.properties === 'object')) {
-    const properties = (record.properties ?? {}) as Record<string, unknown>;
-    const entries = Object.entries(properties);
-    if (entries.length === 0) {
-      return ['-> result: object'];
-    }
-    const lines: string[] = [];
-    const limit = 5;
-    entries.slice(0, limit).forEach(([key, descriptor]) => {
-      if (!descriptor || typeof descriptor !== 'object') {
-        lines.push(formatReturnEntry(key, 'unknown'));
-        return;
-      }
-      const descRecord = descriptor as Record<string, unknown>;
-      const descType = inferSchemaDisplayType(descRecord);
-      const description = typeof descRecord.description === 'string' ? (descRecord.description as string) : undefined;
-      lines.push(formatReturnEntry(key, descType, description));
-    });
-    if (entries.length > limit) {
-      lines.push(extraDimText(`-> … ${entries.length - limit} more field(s)`));
-    }
-    return lines;
-  }
-
-  if (type === 'array') {
-    const items =
-      record.items && typeof record.items === 'object' ? (record.items as Record<string, unknown>) : undefined;
-    const itemType = items ? inferSchemaDisplayType(items) : 'unknown';
-    const description = items && typeof items.description === 'string' ? (items.description as string) : undefined;
-    return [formatReturnEntry('items[]', itemType, description)];
-  }
-
-  if (type) {
-    return [formatReturnEntry('result', type)];
-  }
-
-  return undefined;
-}
-
-function formatReturnEntry(name: string, type: string, description?: string): string {
-  const typeText = dimText(type);
-  const comment = description ? `  ${extraDimText(`// ${description}`)}` : '';
-  return `-> ${name}: ${typeText}${comment}`;
+  return inferSchemaDisplayType(schema as Record<string, unknown>);
 }
 
 function inferSchemaDisplayType(descriptor: Record<string, unknown>): string {
+  const title = typeof descriptor.title === 'string' ? descriptor.title.trim() : undefined;
+  if (title) {
+    return title;
+  }
   const type = typeof descriptor.type === 'string' ? (descriptor.type as string) : undefined;
   if (!type && typeof descriptor.properties === 'object') {
     return 'object';
@@ -529,14 +482,14 @@ function inferSchemaDisplayType(descriptor: Record<string, unknown>): string {
   if (!type && descriptor.items && typeof descriptor.items === 'object') {
     return `${inferSchemaDisplayType(descriptor.items as Record<string, unknown>)}[]`;
   }
+  if (type === 'array' && descriptor.items && typeof descriptor.items === 'object') {
+    return `${inferSchemaDisplayType(descriptor.items as Record<string, unknown>)}[]`;
+  }
   if (!type && Array.isArray(descriptor.enum)) {
     const values = (descriptor.enum as unknown[]).filter((entry): entry is string => typeof entry === 'string');
     if (values.length > 0) {
       return values.map((entry) => JSON.stringify(entry)).join(' | ');
     }
-  }
-  if (type === 'array' && descriptor.items && typeof descriptor.items === 'object') {
-    return `${inferSchemaDisplayType(descriptor.items as Record<string, unknown>)}[]`;
   }
   return type ?? 'unknown';
 }
