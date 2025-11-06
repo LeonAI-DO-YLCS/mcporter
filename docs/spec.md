@@ -16,7 +16,7 @@ summary: 'Plan for the mcporter package replacing the Sweetistics pnpm MCP helpe
   - `createRuntime()` for shared connections (list/call tools, resolve resources).
   - `callOnce()` convenience matching today’s single-call flow.
   - Typed utilities for env/header resolution and stdio command execution.
-- CLI entry point (`npx mcporter list|call`) built on the same runtime with configurable log levels (`--log-level` flag, `MCPORTER_LOG_LEVEL` env) defaulting to `warn`.
+- CLI entry point (`npx mcporter list|call`) built on the same runtime with configurable log levels (`--log-level` flag, `MCPORTER_LOG_LEVEL` env) defaulting to `warn`. Single-server listings must render as TypeScript-style headers: dimmed `/** ... */` doc blocks followed by `function name(...)` signatures, inferred return annotations when schemas expose a `title`, inline enum/format hints, and an optional-parameter summary (`// optional (N): a, b, ...`). Optional fields are hidden by default (unless there are ≤2 of them and <4 required parameters) and the CLI should tell users to run `--include-optional` whenever anything is suppressed.
 - CLI generator (`npx mcporter generate-cli`) that emits standalone CLIs (plain TypeScript or bundled JS) with embedded schemas and Commander-based subcommands, targeting Node or Bun.
 - Test harness using the Sweetistics MCP fixtures to validate every configured server definition.
 - Documentation: README, usage examples, migration guide for replacing `pnpm mcp:*`.
@@ -64,10 +64,10 @@ summary: 'Plan for the mcporter package replacing the Sweetistics pnpm MCP helpe
    - Port config parsing + env/header logic.
    - Implement connection cache, tool invocation, resource helpers.
 3. **CLI Surface**
-   - Implement `list` (with optional schema) and `call` commands.
-   - Render tool metadata as pseudo-TypeScript blocks with dimmed comments, enum unions, and format hints so operators can copy signatures directly into function-call syntax.
-   - Ensure output parity with existing helper.
-   - Add `generate-cli` for standalone/bundled CLIs with embedded schema caching.
+- Implement `list` (with optional schema) and `call` commands.
+- Render tool metadata as pseudo-TypeScript declarations: blue `function` signatures, grey doc comments using `@param` lines, inferred return names, and compact optional summaries that collapse longer lists until users pass `--include-optional`.
+- Ensure output parity with existing helper.
+- Add `generate-cli` for standalone/bundled CLIs with embedded schema caching.
 4. **Testing & Fixtures**
    - Mock representative MCP servers (stdio + HTTP + OAuth) for integration tests.
    - Snapshot output for `list` vs. `call`.

@@ -9,6 +9,7 @@ mcporter helps you lean into the "code execution" workflows highlighted in Anthr
 - **One-command CLI generation.** `mcporter generate-cli` turns any MCP server definition into a ready-to-run CLI, with optional bundling/compilation and metadata for easy regeneration.
 - **Friendly composable API.** `createServerProxy()` exposes tools as ergonomic camelCase methods, automatically applies JSON-schema defaults, validates required arguments, and hands back a `CallResult` with `.text()`, `.markdown()`, `.json()`, and `.content()` helpers.
 - **OAuth and stdio ergonomics.** Built-in OAuth caching, log tailing, and stdio wrappers let you work with HTTP, SSE, and stdio transports from the same interface.
+- **Ad-hoc connections.** Point the CLI at *any* MCP endpoint (HTTP or stdio) without touching config, then persist it later if you want. See [docs/adhoc.md](docs/adhoc.md).
 
 ## Quick Start
 
@@ -19,7 +20,37 @@ mcporter auto-discovers the MCP servers you already configured in Cursor, Claude
 ```bash
 npx mcporter list
 npx mcporter list context7 --schema
+npx mcporter list https://mcp.linear.app/mcp --include-optional
+npx mcporter list --stdio "bun run ./local-server.ts" --env TOKEN=xyz
 ```
+
+You can now point `mcporter list` at ad-hoc servers: provide a URL directly or use the new `--http-url/--stdio` flags (plus `--env`, `--cwd`, `--name`, or `--persist`) to describe any MCP endpoint. The CLI infers a stable name for caching OAuth tokens and can merge the generated entry into a config file whenever you pass `--persist`. Full details live in [docs/adhoc.md](docs/adhoc.md).
+
+Single-server listings now read like a TypeScript header file so you can copy/paste the signature straight into `mcporter call`:
+
+```ts
+linear - Hosted Linear MCP; exposes issue search, create, and workflow tooling.
+  23 tools · 1654ms · HTTP https://mcp.linear.app/mcp
+
+  /**
+   * Create a comment on a specific Linear issue
+   * @param issueId The issue ID
+   * @param body The content of the comment as Markdown
+   * @param parentId? A parent comment ID to reply to
+   */
+  function create_comment(issueId: string, body: string, parentId?: string);
+  // optional (3): notifySubscribers, labelIds, mentionIds
+
+  /**
+   * List documents in the user's Linear workspace
+   * @param query? An optional search query
+   * @param projectId? Filter by project ID
+   */
+  function list_documents(query?: string, projectId?: string);
+  // optional (11): limit, before, after, orderBy, initiativeId, ...
+```
+
+Required parameters always show; optional parameters stay hidden unless (a) there are only one or two of them alongside fewer than four required fields or (b) you pass `--include-optional`. Whenever mcporter hides parameters it prints `Optional parameters hidden; run with --include-optional to view all fields.` so you know how to reveal the full signature. Return types are inferred from the tool schema’s `title`, falling back to omitting the suffix entirely instead of guessing.
 
 ### Context7: fetch docs (no auth required)
 
@@ -38,7 +69,12 @@ LINEAR_API_KEY=sk_linear_example npx mcporter call linear.search_documentation q
 
 ```bash
 npx mcporter call chrome-devtools.take_snapshot
+npx mcporter call 'linear.create_comment(issueId: "LNR-123", body: "Hello world")'
+npx mcporter call https://mcp.linear.app/mcp.list_issues assignee=me
+npx mcporter call linear.listIssues --tool listIssues   # auto-corrects to list_issues
 ```
+
+> Tool calls understand a JavaScript-like call syntax, auto-correct near-miss tool names, and emit richer inline usage hints. See [docs/call-syntax.md](docs/call-syntax.md) for the grammar and [docs/call-heuristic.md](docs/call-heuristic.md) for the auto-correction rules.
 
 Helpful flags:
 
@@ -47,9 +83,16 @@ Helpful flags:
 - `--log-level <debug|info|warn|error>` -- adjust verbosity (respects `MCPORTER_LOG_LEVEL`).
 - `--tail-log` -- stream the last 20 lines of any log files referenced by the tool response.
 - `--output <format>` or `--raw` -- control formatted output (defaults to pretty-printed auto detection).
+- `--http-url <https://…>` / `--stdio "command …"` -- describe an ad-hoc MCP server inline (pair with `--env KEY=value`, `--cwd`, `--name`, and `--persist <config.json>` as needed).
 - For OAuth-protected servers such as `vercel`, run `npx mcporter auth vercel` once to complete login.
 
 Timeouts default to 30 s; override with `MCPORTER_LIST_TIMEOUT` or `MCPORTER_CALL_TIMEOUT` when you expect slow startups.
+
+## Friendlier Tool Calls
+
+- **Function-call syntax.** Instead of juggling `--flag value`, you can call tools as `mcporter call 'linear.create_issue(title: "Bug", team: "ENG")'`. The parser supports nested objects/arrays and surfaces schema validation errors clearly. Deep dive in [docs/call-syntax.md](docs/call-syntax.md).
+- **Auto-correct.** If you typo a tool name, mcporter inspects the server’s tool catalog, retries when the edit distance is tiny, and otherwise prints a `Did you mean …?` hint. The heuristic (and how to tune it) is captured in [docs/call-heuristic.md](docs/call-heuristic.md).
+- **Richer single-server output.** `mcporter list <server>` now prints TypeScript-style signatures, inline comments, return-shape hints, and command examples that mirror the new call syntax. Optional parameters stay hidden by default—add `--include-optional` or `--schema` whenever you need the full JSON schema.
 
 
 ## Installation
@@ -66,14 +109,14 @@ npx mcporter list
 pnpm add mcporter
 ```
 
-### Homebrew (planned for mcporter 0.3.0)
+### Homebrew (steipete/tap)
 
 ```bash
 brew tap steipete/tap
 brew install steipete/tap/mcporter
 ```
 
-> The tap publishes alongside mcporter 0.3.0. Until then, use `npx` or `pnpm add`.
+> The tap publishes alongside mcporter 0.3.0. If you run into issues with an older tap install, run `brew update` before reinstalling.
 
 ## One-shot calls from code
 
