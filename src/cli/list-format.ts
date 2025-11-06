@@ -76,7 +76,8 @@ export function formatSourceSuffix(source: ServerSource | undefined, inline = fa
 export function classifyListError(
   error: unknown,
   serverName: string,
-  _timeoutSeconds: number
+  _timeoutSeconds: number,
+  options?: { authCommand?: string }
 ): {
   colored: string;
   summary: string;
@@ -84,8 +85,9 @@ export function classifyListError(
   authCommand?: string;
 } {
   if (error instanceof UnauthorizedError) {
-    const note = yellowText(`auth required — run 'mcporter auth ${serverName}'`);
-    return { colored: note, summary: 'auth required', category: 'auth', authCommand: `mcporter auth ${serverName}` };
+    const authCommand = options?.authCommand ?? `mcporter auth ${serverName}`;
+    const note = yellowText(`auth required — run '${authCommand}'`);
+    return { colored: note, summary: 'auth required', category: 'auth', authCommand };
   }
 
   const rawMessage =
@@ -104,8 +106,9 @@ export function classifyListError(
     normalized.includes('invalid_token') ||
     normalized.includes('forbidden')
   ) {
-    const note = yellowText(`auth required — run 'mcporter auth ${serverName}'`);
-    return { colored: note, summary: 'auth required', category: 'auth', authCommand: `mcporter auth ${serverName}` };
+    const authCommand = options?.authCommand ?? `mcporter auth ${serverName}`;
+    const note = yellowText(`auth required — run '${authCommand}'`);
+    return { colored: note, summary: 'auth required', category: 'auth', authCommand };
   }
 
   if (

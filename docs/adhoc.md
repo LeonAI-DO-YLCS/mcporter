@@ -23,13 +23,14 @@ You can also pass a bare URL as the selector (`mcporter list https://mcp.linear.
 - Otherwise we derive a slug:
   - HTTP: `<host>` plus a sanitized path fragment (e.g. `mcp-linear-app-mcp`).
   - STDIO: executable basename + script (`node-mcp-server`).
-- The inferred name is printed so you know what to reuse later (`mcporter auth <name>`).
+- The inferred name is printed so you know what to reuse later. If you don’t persist the definition, run `mcporter auth https://mcp.linear.app/mcp` (or supply `--name linear` so `mcporter auth linear` also works) to finish OAuth with the same settings.
 
 This name becomes the cache key for OAuth tokens and log preferences, so repeated ad-hoc calls still benefit from credential reuse.
 
 ## Auth & Persistence
 
 - OAuth flows are allowed; successful tokens store under the inferred name just like regular definitions.
+- `mcporter auth` accepts the same `--http-url/--stdio` flags (and even bare URLs), so you can immediately re-run `mcporter auth https://…` after a 401 without touching a config file.
 - Nothing is written to disk unless you pass `--persist /path/to/config.json`. When set, we merge the generated definition into that file (creating it if necessary) so future runs can rely on the standard config pipeline.
 
 ## Safety Nets

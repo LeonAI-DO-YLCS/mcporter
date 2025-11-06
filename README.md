@@ -24,7 +24,7 @@ npx mcporter list https://mcp.linear.app/mcp --all-parameters
 npx mcporter list --stdio "bun run ./local-server.ts" --env TOKEN=xyz
 ```
 
-You can now point `mcporter list` at ad-hoc servers: provide a URL directly or use the new `--http-url/--stdio` flags (plus `--env`, `--cwd`, `--name`, or `--persist`) to describe any MCP endpoint. The CLI infers a stable name for caching OAuth tokens and can merge the generated entry into a config file whenever you pass `--persist`. Full details live in [docs/adhoc.md](docs/adhoc.md).
+You can now point `mcporter list` at ad-hoc servers: provide a URL directly or use the new `--http-url/--stdio` flags (plus `--env`, `--cwd`, `--name`, or `--persist`) to describe any MCP endpoint. Follow up with `mcporter auth https://…` (or the same flag set) to finish OAuth without editing config. Full details live in [docs/adhoc.md](docs/adhoc.md).
 
 Single-server listings now read like a TypeScript header file so you can copy/paste the signature straight into `mcporter call`:
 
@@ -85,7 +85,7 @@ Helpful flags:
 - `--tail-log` -- stream the last 20 lines of any log files referenced by the tool response.
 - `--output <format>` or `--raw` -- control formatted output (defaults to pretty-printed auto detection).
 - `--all-parameters` -- show every schema field when listing a server (default output shows at least five parameters plus a summary of the rest).
-- `--http-url <https://…>` / `--stdio "command …"` -- describe an ad-hoc MCP server inline (pair with `--env KEY=value`, `--cwd`, `--name`, and `--persist <config.json>` as needed).
+- `--http-url <https://…>` / `--stdio "command …"` -- describe an ad-hoc MCP server inline (pair with `--env KEY=value`, `--cwd`, `--name`, and `--persist <config.json>` as needed). These flags now work with `mcporter auth` too, so `mcporter auth https://mcp.example.com/mcp` just works.
 - For OAuth-protected servers such as `vercel`, run `npx mcporter auth vercel` once to complete login.
 
 > Tip: You can skip the verb entirely—`mcporter firecrawl` automatically runs `mcporter list firecrawl`, and dotted tokens like `mcporter linear.list_issues` dispatch to the call command (typo fixes included).

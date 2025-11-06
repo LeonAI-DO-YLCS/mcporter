@@ -2,6 +2,7 @@ import { createCallResult } from '../result-utils.js';
 import { type EphemeralServerSpec, persistEphemeralServer, resolveEphemeralServer } from './adhoc-server.js';
 import { parseCallExpressionFragment } from './call-expression-parser.js';
 import { chooseClosestIdentifier, normalizeIdentifier } from './identifier-helpers.js';
+import { extractEphemeralServerFlags } from './ephemeral-flags.js';
 import { type OutputFormat, printCallOutput, tailLogIfRequested } from './output-utils.js';
 import { dumpActiveHandles } from './runtime-debug.js';
 import { dimText } from './terminal.js';
@@ -25,13 +26,9 @@ function isOutputFormat(value: string): value is OutputFormat {
 export function parseCallArguments(args: string[]): CallArgsParseResult {
   // Maintain backwards compatibility with legacy positional + key=value forms.
   const result: CallArgsParseResult = { args: {}, tailLog: false, output: 'auto' };
+  const ephemeral = extractEphemeralServerFlags(args);
+  result.ephemeral = ephemeral;
   const positional: string[] = [];
-  const ensureEphemeral = (): EphemeralServerSpec => {
-    if (!result.ephemeral) {
-      result.ephemeral = {};
-    }
-    return result.ephemeral;
-  };
   let index = 0;
   while (index < args.length) {
     const token = args[index];
@@ -73,91 +70,6 @@ export function parseCallArguments(args: string[]): CallArgsParseResult {
     if (token === '--tail-log') {
       result.tailLog = true;
       index += 1;
-      continue;
-    }
-    if (token === '--http-url') {
-      const value = args[index + 1];
-      if (!value) {
-        throw new Error("Flag '--http-url' requires a value.");
-      }
-      ensureEphemeral().httpUrl = value;
-      index += 2;
-      continue;
-    }
-    if (token === '--allow-http') {
-      ensureEphemeral().allowInsecureHttp = true;
-      index += 1;
-      continue;
-    }
-    if (token === '--stdio') {
-      const value = args[index + 1];
-      if (!value) {
-        throw new Error("Flag '--stdio' requires a value.");
-      }
-      ensureEphemeral().stdioCommand = value;
-      index += 2;
-      continue;
-    }
-    if (token === '--stdio-arg') {
-      const value = args[index + 1];
-      if (!value) {
-        throw new Error("Flag '--stdio-arg' requires a value.");
-      }
-      const ephemeral = ensureEphemeral();
-      ephemeral.stdioArgs = [...(ephemeral.stdioArgs ?? []), value];
-      index += 2;
-      continue;
-    }
-    if (token === '--env') {
-      const value = args[index + 1];
-      if (!value || !value.includes('=')) {
-        throw new Error("Flag '--env' requires KEY=value.");
-      }
-      const [key, ...rest] = value.split('=');
-      if (!key) {
-        throw new Error("Flag '--env' requires KEY=value.");
-      }
-      const ephemeral = ensureEphemeral();
-      const envMap = ephemeral.env ? { ...ephemeral.env } : {};
-      envMap[key] = rest.join('=');
-      ephemeral.env = envMap;
-      index += 2;
-      continue;
-    }
-    if (token === '--cwd') {
-      const value = args[index + 1];
-      if (!value) {
-        throw new Error("Flag '--cwd' requires a value.");
-      }
-      ensureEphemeral().cwd = value;
-      index += 2;
-      continue;
-    }
-    if (token === '--name') {
-      const value = args[index + 1];
-      if (!value) {
-        throw new Error("Flag '--name' requires a value.");
-      }
-      ensureEphemeral().name = value;
-      index += 2;
-      continue;
-    }
-    if (token === '--description') {
-      const value = args[index + 1];
-      if (!value) {
-        throw new Error("Flag '--description' requires a value.");
-      }
-      ensureEphemeral().description = value;
-      index += 2;
-      continue;
-    }
-    if (token === '--persist') {
-      const value = args[index + 1];
-      if (!value) {
-        throw new Error("Flag '--persist' requires a value.");
-      }
-      ensureEphemeral().persistPath = value;
-      index += 2;
       continue;
     }
     if (token === '--yes') {

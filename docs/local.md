@@ -15,6 +15,9 @@ pnpm exec tsx src/cli.ts call context7.resolve-library-id libraryName=react
 
 # auth flow
 pnpm exec tsx src/cli.ts auth vercel
+
+# ad-hoc auth
+pnpm exec tsx src/cli.ts auth https://mcp.supabase.com/mcp
 ```
 
 These invocations match the `pnpm mcporter:*` scripts and are ideal when you’re iterating on TypeScript without rebuilding.

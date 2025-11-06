@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 import fsPromises from 'node:fs/promises';
 import { handleCall as runHandleCall } from './cli/call-command.js';
+import { type EphemeralServerSpec, persistEphemeralServer, resolveEphemeralServer } from './cli/adhoc-server.js';
 import { inferCommandRouting } from './cli/command-inference.js';
+import { extractEphemeralServerFlags } from './cli/ephemeral-flags.js';
 import { handleList } from './cli/list-command.js';
 import { formatSourceSuffix } from './cli/list-format.js';
 import { getActiveLogger, getActiveLogLevel, logError, logInfo, logWarn, setLogLevel } from './cli/logger-context.js';
@@ -728,16 +730,38 @@ if (process.env.MCPORTER_DISABLE_AUTORUN !== '1') {
   });
 }
 // handleAuth clears cached tokens and executes standalone OAuth flows.
-async function handleAuth(runtime: Awaited<ReturnType<typeof createRuntime>>, args: string[]): Promise<void> {
+export async function handleAuth(runtime: Awaited<ReturnType<typeof createRuntime>>, args: string[]): Promise<void> {
   // Peel off optional flags before we consume positional args.
   const resetIndex = args.indexOf('--reset');
   const shouldReset = resetIndex !== -1;
   if (shouldReset) {
     args.splice(resetIndex, 1);
   }
-  const target = args.shift();
+  let ephemeralSpec: EphemeralServerSpec | undefined = extractEphemeralServerFlags(args);
+  let target = args.shift();
+  if (!ephemeralSpec && target && looksLikeHttpUrl(target)) {
+    ephemeralSpec = { httpUrl: target };
+    target = undefined;
+  }
+
+  if (ephemeralSpec && target && !looksLikeHttpUrl(target)) {
+    ephemeralSpec = { ...ephemeralSpec, name: ephemeralSpec.name ?? target };
+  }
+
+  let ephemeralResolution: ReturnType<typeof resolveEphemeralServer> | undefined;
+  if (ephemeralSpec) {
+    ephemeralResolution = resolveEphemeralServer(ephemeralSpec);
+    runtime.registerDefinition(ephemeralResolution.definition, { overwrite: true });
+    if (ephemeralSpec.persistPath) {
+      await persistEphemeralServer(ephemeralResolution, ephemeralSpec.persistPath);
+    }
+    if (!target) {
+      target = ephemeralResolution.name;
+    }
+  }
+
   if (!target) {
-    throw new Error('Usage: mcporter auth <server>');
+    throw new Error('Usage: mcporter auth <server | url> [--http-url <url> | --stdio <command>]');
   }
 
   const definition = runtime.getDefinition(target);
@@ -761,4 +785,8 @@ async function handleAuth(runtime: Awaited<ReturnType<typeof createRuntime>>, ar
     const message = error instanceof Error ? error.message : String(error);
     throw new Error(`Failed to authorize '${target}': ${message}`);
   }
+}
+
+function looksLikeHttpUrl(value: string): boolean {
+  return /^https?:\/\//i.test(value);
 }

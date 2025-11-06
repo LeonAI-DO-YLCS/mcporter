@@ -8,6 +8,7 @@
 - Guaranteed that default listings always show at least five parameters (even if every field is optional) before summarising the rest, and added compact summaries (`// optional (N): …`).
 - Added `src/cli/list-detail-helpers.ts` plus dedicated unit tests (`tests/list-detail-helpers.test.ts`) covering wrapping, param selection, and optional summaries; introduced an inline snapshot test for a complex Linear server to prevent regressions in the CLI formatter.
 - Exported the identifier normalization helpers so other modules can reuse the shared Levenshtein logic without duplicate implementations.
+- Added a shared `extractEphemeralServerFlags` helper so `list`, `call`, and `auth` parse ad-hoc transports consistently, extended `mcporter auth` to accept bare URLs/`--http-url`/`--stdio`, and taught single-server listings to hint `mcporter auth https://…` when a 401 occurs. Docs (`README.md`, `docs/adhoc.md`, `docs/local.md`, `docs/call-heuristic.md`) and new tests (`tests/cli-auth.test.ts`, `tests/cli-ephemeral-flags.test.ts`, expanded `tests/cli-list.test.ts`) cover the workflow.
 
 ## [0.3.0] - 2025-11-06
 
