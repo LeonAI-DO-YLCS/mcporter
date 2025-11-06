@@ -228,8 +228,9 @@ npx mcporter regenerate-cli dist/context7.js  # replay with latest mcporter
 			}
 		},
 		"chrome-devtools": {
-			"command": "bash",
-			"args": ["scripts/mcp_stdio_wrapper.sh", "env", "npx", "-y", "chrome-devtools-mcp@latest"]
+			"command": "npx",
+			"args": ["-y", "chrome-devtools-mcp@latest"],
+			"env": { "npm_config_loglevel": "error" }
 		}
 	},
 	"imports": ["cursor", "claude-code", "claude-desktop", "codex"]

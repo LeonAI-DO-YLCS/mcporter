@@ -2,15 +2,14 @@
   "mcpServers": {
     "chrome-devtools": {
       "description": "Chrome DevTools protocol bridge for driving local tabs during debugging or automation.",
-      "command": "bash",
+      "command": "npx",
       "args": [
-        "scripts/mcp_stdio_wrapper.sh",
-        "env",
-        "npm_config_loglevel=error",
-        "npx",
         "-y",
         "chrome-devtools-mcp@latest"
-      ]
+      ],
+      "env": {
+        "npm_config_loglevel": "error"
+      }
     },
     "context7": {
       "description": "Context7 MCP for React documentation lookup.",
@@ -29,15 +28,14 @@
     },
     "playwright": {
       "description": "Playwright MCP server for accessibility-driven automation.",
-      "command": "bash",
+      "command": "npx",
       "args": [
-        "scripts/mcp_stdio_wrapper.sh",
-        "env",
-        "npm_config_loglevel=error",
-        "npx",
         "-y",
         "@playwright/mcp@latest"
-      ]
+      ],
+      "env": {
+        "npm_config_loglevel": "error"
+      }
     },
     "vercel": {
       "description": "Vercel MCP (requires OAuth).",
@@ -54,19 +52,16 @@
     },
     "signoz": {
       "description": "SigNoz Query MCP server (logs, traces, metrics).",
-      "command": "bash",
+      "command": "npx",
       "args": [
-        "scripts/mcp_stdio_wrapper.sh",
-        "env",
-        "NODE_OPTIONS=--require=./scripts/mcp_signoz_retry_patch.cjs",
-        "npm_config_loglevel=error",
-        "npx",
         "-y",
         "signoz-mcp-server@latest"
       ],
       "env": {
         "SIGNOZ_URL": "${SIGNOZ_URL:-http://localhost:3301}",
-        "SIGNOZ_TOKEN": "${SIGNOZ_TOKEN:-}"
+        "SIGNOZ_TOKEN": "${SIGNOZ_TOKEN:-}",
+        "npm_config_loglevel": "error",
+        "NODE_OPTIONS": "--require=./scripts/mcp_signoz_retry_patch.cjs"
       }
     },
     "shadcn": {
