@@ -52,7 +52,7 @@ export function renderTypesModule(input: EmitTypesTemplateInput): string {
 export function renderClientModule(input: EmitClientTemplateInput): string {
   const lines: string[] = [];
   lines.push(...renderHeader(input.metadata));
-  lines.push("import { createCallResult, createRuntime, createServerProxy } from 'mcporter';");
+  lines.push("import { createRuntime, createServerProxy, wrapCallResult } from 'mcporter';");
   lines.push(`import type { ${input.interfaceName} } from '${input.typesImportPath}';`);
   lines.push('');
   lines.push('type RuntimeInstance = Awaited<ReturnType<typeof createRuntime>>;');
@@ -82,7 +82,7 @@ export function renderClientModule(input: EmitClientTemplateInput): string {
       `      const tool = proxy.${entry.methodName} as (args: Parameters<${input.interfaceName}['${methodName}']>[0]) => Promise<unknown>;`
     );
     lines.push('      const raw = await tool(params);');
-    lines.push('      return createCallResult(raw);');
+    lines.push('      return wrapCallResult(raw).callResult;');
     lines.push('    },');
     lines.push('');
   });

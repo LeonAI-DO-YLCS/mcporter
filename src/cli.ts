@@ -5,6 +5,7 @@ import { type EphemeralServerSpec, persistEphemeralServer, resolveEphemeralServe
 import { CliUsageError } from './cli/errors.js';
 import { inferCommandRouting } from './cli/command-inference.js';
 import { extractEphemeralServerFlags } from './cli/ephemeral-flags.js';
+import { extractGeneratorFlags } from './cli/generate/flag-parser.js';
 import { handleEmitTs } from './cli/emit-ts-command.js';
 import { handleList } from './cli/list-command.js';
 import { formatSourceSuffix } from './cli/list-format.js';
@@ -183,6 +184,7 @@ interface GenerateFlags {
 
 // parseGenerateFlags extracts generate-cli specific flags from argv.
 function parseGenerateFlags(args: string[]): GenerateFlags {
+  const common = extractGeneratorFlags(args);
   let server: string | undefined;
   let name: string | undefined;
   let command: string | undefined;
@@ -190,8 +192,8 @@ function parseGenerateFlags(args: string[]): GenerateFlags {
   let output: string | undefined;
   let bundle: boolean | string | undefined;
   let compile: boolean | string | undefined;
-  let runtime: 'node' | 'bun' | undefined;
-  let timeout = 30_000;
+  let runtime: 'node' | 'bun' | undefined = common.runtime;
+  let timeout = common.timeout ?? 30_000;
   let minify = false;
 
   let index = 0;
@@ -223,24 +225,6 @@ function parseGenerateFlags(args: string[]): GenerateFlags {
     }
     if (token === '--output') {
       output = expectValue(token, args[index + 1]);
-      args.splice(index, 2);
-      continue;
-    }
-    if (token === '--runtime') {
-      const value = expectValue(token, args[index + 1]);
-      if (value !== 'node' && value !== 'bun') {
-        throw new Error("--runtime must be 'node' or 'bun'.");
-      }
-      runtime = value;
-      args.splice(index, 2);
-      continue;
-    }
-    if (token === '--timeout') {
-      const value = Number.parseInt(expectValue(token, args[index + 1]), 10);
-      if (!Number.isFinite(value) || value <= 0) {
-        throw new Error('--timeout must be a positive integer.');
-      }
-      timeout = value;
       args.splice(index, 2);
       continue;
     }
@@ -396,6 +380,13 @@ interface RegenerateParseResult {
 function parseRegenerateFlags(args: string[]): RegenerateParseResult {
   const overrides: RegenerateOverrides = {};
   let dryRun = false;
+  const common = extractGeneratorFlags(args);
+  if (common.runtime) {
+    overrides.runtime = common.runtime;
+  }
+  if (common.timeout) {
+    overrides.timeoutMs = common.timeout;
+  }
   let index = 0;
   while (index < args.length) {
     const token = args[index];
@@ -415,24 +406,6 @@ function parseRegenerateFlags(args: string[]): RegenerateParseResult {
     }
     if (token === '--config') {
       overrides.config = expectValue(token, args[index + 1]);
-      args.splice(index, 2);
-      continue;
-    }
-    if (token === '--runtime') {
-      const value = expectValue(token, args[index + 1]);
-      if (value !== 'node' && value !== 'bun') {
-        throw new Error("--runtime must be 'node' or 'bun'.");
-      }
-      overrides.runtime = value;
-      args.splice(index, 2);
-      continue;
-    }
-    if (token === '--timeout') {
-      const value = Number.parseInt(expectValue(token, args[index + 1]), 10);
-      if (!Number.isFinite(value) || value <= 0) {
-        throw new Error('--timeout must be a positive integer.');
-      }
-      overrides.timeoutMs = value;
       args.splice(index, 2);
       continue;
     }

@@ -3,7 +3,8 @@
 `mcporter emit-ts` turns a configured MCP server into TypeScript artifacts so
 agents, tests, and tooling can consume the server through strongly typed APIs.
 It reuses the same `buildToolDoc()` data that powers `mcporter list`, so doc
-comments, parameter hints, and signatures stay perfectly in sync.
+comments, parameter hints, and signatures stay perfectly in sync. For a broader
+overview of every CLI command, see `docs/cli-reference.md`.
 
 ```
 mcporter emit-ts <server> --out linear-client.ts \

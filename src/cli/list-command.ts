@@ -4,12 +4,10 @@ import type { ServerToolInfo } from '../runtime.js';
 import { type EphemeralServerSpec, persistEphemeralServer, resolveEphemeralServer } from './adhoc-server.js';
 import { extractEphemeralServerFlags } from './ephemeral-flags.js';
 import type { GeneratedOption } from './generate/tools.js';
-import { extractOptions } from './generate/tools.js';
+import type { ToolMetadata } from './generate/tools.js';
 import { chooseClosestIdentifier } from './identifier-helpers.js';
-import {
-  buildToolDoc,
-  formatExampleBlock,
-} from './list-detail-helpers.js';
+import { buildToolDoc, formatExampleBlock } from './list-detail-helpers.js';
+import { loadToolMetadata } from './tool-cache.js';
 import type { ListSummaryResult, StatusCategory } from './list-format.js';
 import { classifyListError, formatSourceSuffix, renderServerListRow } from './list-format.js';
 import { boldText, cyanText, dimText, extraDimText, supportsSpinner, yellowText } from './terminal.js';
@@ -196,12 +194,15 @@ export async function handleList(
   const startedAt = Date.now();
   try {
     // Always request schemas so we can render CLI-style parameter hints without re-querying per tool.
-    const tools = await withTimeout(runtime.listTools(target, { includeSchema: true }), timeoutMs);
+    const metadataEntries = await withTimeout(
+      loadToolMetadata(runtime, target, { includeSchema: true }),
+      timeoutMs
+    );
     const durationMs = Date.now() - startedAt;
-    const summaryLine = printSingleServerHeader(definition, tools.length, durationMs, transportSummary, sourcePath, {
+    const summaryLine = printSingleServerHeader(definition, metadataEntries.length, durationMs, transportSummary, sourcePath, {
       printSummaryNow: false,
     });
-    if (tools.length === 0) {
+    if (metadataEntries.length === 0) {
       console.log('  Tools: <none>');
       console.log(summaryLine);
       console.log('');
@@ -209,8 +210,8 @@ export async function handleList(
     }
     const examples: string[] = [];
     let optionalOmitted = false;
-    for (const tool of tools) {
-      const detail = printToolDetail(target, tool, Boolean(flags.schema), flags.requiredOnly);
+    for (const entry of metadataEntries) {
+      const detail = printToolDetail(target, entry, Boolean(flags.schema), flags.requiredOnly);
       examples.push(...detail.examples);
       optionalOmitted ||= detail.optionalOmitted;
     }
@@ -293,19 +294,13 @@ function printSingleServerHeader(
   return summaryLine;
 }
 
-function printToolDetail(
-  serverName: string,
-  tool: { name: string; description?: string; inputSchema?: unknown; outputSchema?: unknown },
-  includeSchema: boolean,
-  requiredOnly: boolean
-): ToolDetailResult {
-  const options = extractOptions(tool as ServerToolInfo);
+function printToolDetail(serverName: string, metadata: ToolMetadata, includeSchema: boolean, requiredOnly: boolean): ToolDetailResult {
   const doc = buildToolDoc({
     serverName,
-    toolName: tool.name,
-    description: tool.description,
-    outputSchema: tool.outputSchema,
-    options,
+    toolName: metadata.tool.name,
+    description: metadata.tool.description,
+    outputSchema: metadata.tool.outputSchema,
+    options: metadata.options,
     requiredOnly,
     colorize: true,
   });
@@ -318,9 +313,9 @@ function printToolDetail(
   if (doc.optionalSummary && requiredOnly) {
     console.log(`  ${doc.optionalSummary}`);
   }
-  if (includeSchema && tool.inputSchema) {
+  if (includeSchema && metadata.tool.inputSchema) {
     // Schemas can be large — indenting keeps multi-line JSON legible without disrupting surrounding output.
-    console.log(indent(JSON.stringify(tool.inputSchema, null, 2), '      '));
+    console.log(indent(JSON.stringify(metadata.tool.inputSchema, null, 2), '      '));
   }
   console.log('');
   return {

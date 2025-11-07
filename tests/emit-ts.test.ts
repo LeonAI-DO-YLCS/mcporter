@@ -2,39 +2,19 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import type { ServerDefinition } from '../src/config.js';
-import type { Runtime, ServerToolInfo } from '../src/runtime.js';
+import type { Runtime } from '../src/runtime.js';
 import { handleEmitTs, __test as emitTsTestInternals } from '../src/cli/emit-ts-command.js';
 import { renderClientModule, renderTypesModule } from '../src/cli/emit-ts-templates.js';
-
-const sampleDefinition: ServerDefinition = {
-  name: 'integration',
-  description: 'Integration test server',
-  command: { kind: 'http', url: 'https://example.com/mcp' },
-  transport: 'stdio',
-};
-
-const sampleTool: ServerToolInfo = {
-  name: 'list_comments',
-  description: 'List comments for an issue',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      issueId: { type: 'string', description: 'Issue identifier' },
-      limit: { type: 'number', description: 'Limit results', default: 10 },
-    },
-    required: ['issueId'],
-  },
-  outputSchema: { title: 'CommentList' },
-};
+import { buildToolMetadata } from '../src/cli/generate/tools.js';
+import { integrationDefinition, listCommentsTool } from './fixtures/tool-fixtures.js';
 
 function createRuntimeStub(): Runtime {
   return {
     listServers: () => ['integration'],
-    getDefinitions: () => [sampleDefinition],
-    getDefinition: () => sampleDefinition,
+    getDefinitions: () => [integrationDefinition],
+    getDefinition: () => integrationDefinition,
     registerDefinition: () => {},
-    listTools: async () => [sampleTool],
+    listTools: async () => [listCommentsTool],
     callTool: async () => ({}),
     listResources: async () => ({}),
     connect: async () => {
@@ -46,9 +26,9 @@ function createRuntimeStub(): Runtime {
 
 describe('emit-ts templates', () => {
   it('renders type declarations with CallResult returns', () => {
-    const docs = emitTsTestInternals.buildDocEntries('integration', [sampleTool], false);
+    const docs = emitTsTestInternals.buildDocEntries('integration', [buildToolMetadata(listCommentsTool)], false);
     const metadata = {
-      server: sampleDefinition,
+      server: integrationDefinition,
       generatorLabel: 'mcporter@test',
       generatedAt: new Date('2025-11-07T00:00:00Z'),
     };
@@ -59,9 +39,9 @@ describe('emit-ts templates', () => {
   });
 
   it('renders client module that wraps proxy calls', () => {
-    const docs = emitTsTestInternals.buildDocEntries('integration', [sampleTool], true);
+    const docs = emitTsTestInternals.buildDocEntries('integration', [buildToolMetadata(listCommentsTool)], true);
     const metadata = {
-      server: sampleDefinition,
+      server: integrationDefinition,
       generatorLabel: 'mcporter@test',
       generatedAt: new Date('2025-11-07T00:00:00Z'),
     };
@@ -72,7 +52,7 @@ describe('emit-ts templates', () => {
       typesImportPath: './integration-client',
     });
     expect(source).toContain('createIntegrationClient');
-    expect(source).toContain('createCallResult');
+    expect(source).toContain('wrapCallResult');
     expect(source).toContain('proxy.listComments');
   });
 });

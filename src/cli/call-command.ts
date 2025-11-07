@@ -1,5 +1,5 @@
 import type { ServerToolInfo } from '../runtime.js';
-import { createCallResult } from '../result-utils.js';
+import { wrapCallResult } from '../result-utils.js';
 import { type EphemeralServerSpec, persistEphemeralServer, resolveEphemeralServer } from './adhoc-server.js';
 import { parseCallExpressionFragment } from './call-expression-parser.js';
 import { CliUsageError } from './errors.js';
@@ -261,7 +261,7 @@ export async function handleCall(
   const hydratedArgs = await hydratePositionalArguments(runtime, server, tool, parsed.args, parsed.positionalArgs);
   const { result } = await invokeWithAutoCorrection(runtime, server, tool, hydratedArgs, timeoutMs);
 
-  const wrapped = createCallResult(result);
+  const { callResult: wrapped } = wrapCallResult(result);
   printCallOutput(wrapped, result, parsed.output);
   tailLogIfRequested(result, parsed.tailLog);
   dumpActiveHandles('after call (formatted result)');

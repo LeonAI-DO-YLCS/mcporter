@@ -1,7 +1,7 @@
 export type { CommandSpec, ServerDefinition } from './config.js';
 export { loadServerDefinitions } from './config.js';
 export type { CallResult } from './result-utils.js';
-export { createCallResult } from './result-utils.js';
+export { createCallResult, wrapCallResult } from './result-utils.js';
 export type {
   CallOptions,
   ListToolsOptions,

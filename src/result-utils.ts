@@ -202,3 +202,7 @@ export function createCallResult<T = unknown>(raw: T): CallResult<T> {
     },
   };
 }
+
+export function wrapCallResult<T = unknown>(raw: T): { raw: T; callResult: CallResult<T> } {
+  return { raw, callResult: createCallResult(raw) };
+}

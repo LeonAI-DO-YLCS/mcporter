@@ -289,7 +289,7 @@ describe('CLI list classification', () => {
     expect(
       lines.some((line) => line.includes('Optional parameters hidden; run with --all-parameters to view all fields'))
     ).toBe(false);
-    expect(listToolsSpy).toHaveBeenCalledWith('calculator', { includeSchema: true });
+    expect(listToolsSpy).toHaveBeenCalledWith('calculator', expect.objectContaining({ includeSchema: true }));
 
     logSpy.mockRestore();
   });
@@ -316,7 +316,7 @@ describe('CLI list classification', () => {
     expect(
       lines.some((line) => line.includes('Optional parameters hidden; run with --all-parameters to view all fields'))
     ).toBe(true);
-    expect(listToolsSpy).toHaveBeenCalledWith('linear', { includeSchema: true });
+    expect(listToolsSpy).toHaveBeenCalledWith('linear', expect.objectContaining({ includeSchema: true }));
 
     logSpy.mockRestore();
   });
@@ -416,7 +416,7 @@ describe('CLI list classification', () => {
     expect(lines.some((line) => line.includes('limit?: number'))).toBe(true);
     expect(lines.some((line) => line.includes('orderBy?: "createdAt" | "updatedAt"'))).toBe(true);
     expect(lines.some((line) => line.includes('includeArchived?: boolean'))).toBe(true);
-    expect(listToolsSpy).toHaveBeenCalledWith('linear', { includeSchema: true });
+    expect(listToolsSpy).toHaveBeenCalledWith('linear', expect.objectContaining({ includeSchema: true }));
 
     logSpy.mockRestore();
   });
@@ -528,7 +528,7 @@ describe('CLI list classification', () => {
 
     expect(registerDefinition).toHaveBeenCalled();
     expect(definitions.get('mcp-example-com-mcp')).toBeDefined();
-    expect(listTools).toHaveBeenCalledWith('mcp-example-com-mcp', { includeSchema: true });
+    expect(listTools).toHaveBeenCalledWith('mcp-example-com-mcp', expect.objectContaining({ includeSchema: true }));
 
     logSpy.mockRestore();
   });
@@ -554,7 +554,7 @@ describe('CLI list classification', () => {
     await handleList(runtime, ['linera']);
 
     expect(getDefinition).toHaveBeenCalledTimes(2);
-    expect(listTools).toHaveBeenCalledWith('linear', { includeSchema: true });
+    expect(listTools).toHaveBeenCalledWith('linear', expect.objectContaining({ includeSchema: true }));
     const messages = logSpy.mock.calls.map((call) => stripAnsi(call.join(' ')));
     expect(messages.some((line) => line.includes('Auto-corrected server name to linear'))).toBe(true);
 

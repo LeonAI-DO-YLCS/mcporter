@@ -1,10 +1,12 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import type { ServerDefinition } from '../config.js';
-import type { Runtime, ServerToolInfo } from '../runtime.js';
+import type { Runtime } from '../runtime.js';
 import { buildToolDoc } from './list-detail-helpers.js';
 import { renderClientModule, renderTypesModule, type EmitMetadata, type ToolDocEntry } from './emit-ts-templates.js';
-import { extractOptions, toProxyMethodName } from './generate/tools.js';
+import type { ToolMetadata } from './generate/tools.js';
+import { extractGeneratorFlags } from './generate/flag-parser.js';
+import { loadToolMetadata } from './tool-cache.js';
 import { readPackageMetadata } from './generate/template.js';
 
 interface EmitTsFlags {
@@ -24,14 +26,14 @@ interface ParsedEmitTsOptions extends Required<Omit<EmitTsFlags, 'server' | 'out
 export async function handleEmitTs(runtime: Runtime, args: string[]): Promise<void> {
   const options = parseEmitTsArgs(args);
   const definition = getServerDefinition(runtime, options.server);
-  const tools = await runtime.listTools(options.server, { includeSchema: true, autoAuthorize: false });
+  const metadataEntries = await loadToolMetadata(runtime, options.server, { includeSchema: true, autoAuthorize: false });
   const generator = await readPackageMetadata();
   const metadata: EmitMetadata = {
     server: definition,
     generatorLabel: `${generator.name}@${generator.version}`,
     generatedAt: new Date(),
   };
-  const docEntries = buildDocEntries(options.server, tools, options.includeOptional);
+  const docEntries = buildDocEntries(options.server, metadataEntries, options.includeOptional);
   const interfaceName = buildInterfaceName(options.server);
 
   if (options.mode === 'types') {
@@ -60,6 +62,10 @@ function parseEmitTsArgs(args: string[]): ParsedEmitTsOptions {
     mode: 'types',
     includeOptional: false,
   };
+  const common = extractGeneratorFlags(args, { allowIncludeOptional: true });
+  if (common.includeOptional) {
+    flags.includeOptional = true;
+  }
   let index = 0;
   while (index < args.length) {
     const token = args[index];
@@ -92,11 +98,6 @@ function parseEmitTsArgs(args: string[]): ParsedEmitTsOptions {
       }
       flags.mode = value;
       args.splice(index, 2);
-      continue;
-    }
-    if (token === '--include-optional' || token === '--all-parameters') {
-      flags.includeOptional = true;
-      args.splice(index, 1);
       continue;
     }
     if (token.startsWith('--')) {
@@ -139,21 +140,21 @@ function getServerDefinition(runtime: Runtime, name: string): ServerDefinition {
   }
 }
 
-function buildDocEntries(serverName: string, tools: ServerToolInfo[], includeOptional: boolean): ToolDocEntry[] {
-  return tools.map((tool) => {
+function buildDocEntries(serverName: string, metadataEntries: ToolMetadata[], includeOptional: boolean): ToolDocEntry[] {
+  return metadataEntries.map((entry) => {
     const doc = buildToolDoc({
       serverName,
-      toolName: tool.name,
-      description: tool.description,
-      outputSchema: tool.outputSchema,
-      options: extractOptions(tool),
+      toolName: entry.tool.name,
+      description: entry.tool.description,
+      outputSchema: entry.tool.outputSchema,
+      options: entry.options,
       requiredOnly: !includeOptional,
       colorize: false,
       defaultReturnType: 'CallResult',
     });
     return {
-      toolName: tool.name,
-      methodName: toProxyMethodName(tool.name),
+      toolName: entry.tool.name,
+      methodName: entry.methodName,
       doc,
     };
   });
