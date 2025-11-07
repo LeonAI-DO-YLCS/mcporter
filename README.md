@@ -277,7 +277,8 @@ npx mcporter generate-cli \
 Tip: you can drop `--command` when the inline command is the first positional argument (e.g., `npx mcporter generate-cli "npx -y chrome-devtools-mcp@latest"`).
 
 - `--name` overrides the inferred CLI name.
-- Add `--description "..."` if you want a custom summary in the generated help output.
+- Add `--description "..."` if you want a custom summary in the generated help output (otherwise mcporter asks the MCP server for its own description/title during generation).
+- Generated CLIs inherit the same color-aware help layout as `mcporter` itself: invoking the binary with no arguments shows the embedded tool list + quick start, and each `--help` page uses bold titles + dimmed descriptions when stdout is a TTY.
 - Add `--bundle [path]` to emit a bundle alongside the template (Rolldown when targeting Node, Bun automatically when the runtime resolves to Bun; override with `--bundler rolldown|bun`).
 - `--output <path>` writes the template somewhere specific.
 - `--runtime bun|node` picks the runtime for generated code (Bun required for `--compile`).

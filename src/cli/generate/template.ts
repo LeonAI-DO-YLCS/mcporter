@@ -81,6 +81,7 @@ export function renderTemplate({
     name: tool.tool.name,
     description: tool.tool.description ?? '',
     usage: doc.flagUsage ? `${tool.tool.name} ${doc.flagUsage}` : undefined,
+    flags: doc.flagUsage ?? '',
   }));
   const generatorHeaderLiteral = JSON.stringify(generatorHeader);
   const toolHelpLiteral = JSON.stringify(toolHelp, undefined, 2);
@@ -131,6 +132,8 @@ program
 \t\tconsole.log(JSON.stringify(payload, null, 2));
 \t});
 
+configureToolCommandHelps();
+
 const FORCE_COLOR = process.env.FORCE_COLOR?.toLowerCase();
 const forceDisableColor = FORCE_COLOR === '0' || FORCE_COLOR === 'false';
 const forceEnableColor = FORCE_COLOR === '1' || FORCE_COLOR === 'true' || FORCE_COLOR === '2' || FORCE_COLOR === '3';
@@ -149,6 +152,32 @@ const tint = {
 		return supportsAnsiColor ? '\u001B[38;5;244m' + text + '\u001B[0m' : text;
 	},
 };
+
+function configureGeneratedCommandHelp(command: Command): void {
+	command.configureHelp({
+		commandUsage(target) {
+			const usage = (target.name() + ' ' + target.usage()).trim() || target.name();
+			return supportsAnsiColor ? tint.bold(usage) : usage;
+		},
+		optionTerm(option) {
+			const term = option.flags ?? '';
+			return supportsAnsiColor ? tint.bold(term) : term;
+		},
+		optionDescription(option) {
+			const description = option.description ?? '';
+			return supportsAnsiColor ? tint.extraDim(description) : description;
+		},
+	});
+}
+
+function configureToolCommandHelps(): void {
+	program.commands.forEach((cmd) => {
+		if (cmd.name() === '__mcporter_inspect') {
+			return;
+		}
+		configureGeneratedCommandHelp(cmd);
+	});
+}
 
 function renderStandaloneHelp(): string {
 	const colorfulTitle = tint.bold(embeddedName) + ' ' + tint.dim('— ' + embeddedDescription);
@@ -181,11 +210,15 @@ function formatEmbeddedTools(): string {
 			: undefined;
 		const base = renderedDesc ? entry.name + ' - ' + renderedDesc : entry.name;
 		lines.push('  ' + base);
-		if (entry.usage) {
-			const usageLabel = supportsAnsiColor ? tint.extraDim('usage:') : 'usage:';
-			lines.push('    ' + usageLabel + ' ' + entry.usage);
+		if (entry.flags) {
+			const renderedFlags = supportsAnsiColor ? tint.extraDim(entry.flags) : entry.flags;
+			lines.push('    ' + renderedFlags);
 		}
+		lines.push('');
 	});
+	if (lines[lines.length - 1] === '') {
+		lines.pop();
+	}
 	return lines.join('\\n');
 }
 
@@ -396,6 +429,7 @@ export function renderToolCommand(
   const block = `program
 \t.command(${JSON.stringify(commandName)})
 \t.summary(${JSON.stringify(summary)})
+\t.description(${JSON.stringify(description)})
 \t.description(${JSON.stringify(description)})
 ${usageSnippet ? `\t${usageSnippet}` : ''}\t.option('--raw <json>', 'Provide raw JSON arguments to the tool, bypassing flag parsing.')
 ${optionLines ? `\n${optionLines}` : ''}

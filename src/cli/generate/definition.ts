@@ -2,7 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import type { CliArtifactMetadata } from '../../cli-metadata.js';
 import { type HttpCommand, loadServerDefinitions, type ServerDefinition, type StdioCommand } from '../../config.js';
-import type { ServerToolInfo } from '../../runtime.js';
+import type { Runtime, ServerToolInfo } from '../../runtime.js';
 import { createRuntime } from '../../runtime.js';
 import { extractHttpServerTarget, normalizeHttpUrl } from '../http-utils.js';
 
@@ -126,7 +126,7 @@ export async function fetchTools(
   serverName: string,
   configPath?: string,
   rootDir?: string
-): Promise<ServerToolInfo[]> {
+): Promise<{ tools: ServerToolInfo[]; derivedDescription?: string }> {
   // Reuse the runtime helper so bundle builds and CLI generation share the same discovery path.
   const runtime = await createRuntime({
     configPath,
@@ -134,10 +134,45 @@ export async function fetchTools(
     servers: configPath ? undefined : [definition],
   });
   try {
-    return await runtime.listTools(serverName, { includeSchema: true });
+    const tools = await runtime.listTools(serverName, { includeSchema: true });
+    const derivedDescription = definition.description
+      ? undefined
+      : await deriveDefinitionDescription(runtime, serverName);
+    return { tools, derivedDescription };
   } finally {
     await runtime.close(serverName).catch(() => {});
   }
+}
+
+async function deriveDefinitionDescription(runtime: Runtime, serverName: string): Promise<string | undefined> {
+  try {
+    const context = await runtime.connect(serverName);
+    const instructions =
+      typeof context.client.getInstructions === 'function' ? context.client.getInstructions() : undefined;
+    const serverInfo =
+      typeof context.client.getServerVersion === 'function' ? context.client.getServerVersion() : undefined;
+    const derived = pickDescription(instructions, serverInfo);
+    return derived;
+  } catch {
+    // Ignore metadata lookup failures; fallback description will be used instead.
+    return undefined;
+  }
+}
+
+function pickDescription(
+  instructions: unknown,
+  serverInfo: { title?: unknown; name?: unknown } | undefined
+): string | undefined {
+  const ordered = [instructions, serverInfo?.title, serverInfo?.name];
+  for (const candidate of ordered) {
+    if (typeof candidate === 'string') {
+      const trimmed = candidate.trim();
+      if (trimmed.length > 0) {
+        return trimmed;
+      }
+    }
+  }
+  return undefined;
 }
 
 export function normalizeDefinition(def: DefinitionInput): ServerDefinition {

@@ -27,6 +27,9 @@
 - For integration scenarios, reuse the HTTP harness shown in `tests/runtime-integration.test.ts` and ensure transports close in `afterAll`.
 - Validate new work with `pnpm test` and confirm `pnpm lint` stays green.
 
+## Changelog Guidelines
+- Focus on user-facing behavior changes; avoid calling out internal testing-only updates.
+
 ## Commit & Pull Request Guidelines
 - Commits should be scoped and written in imperative mood (`Add tsgo lint gate`, `Fix runtime integration transport`).
 - Reference related issues in the body (`Refs #123`) and describe observable behavior changes.

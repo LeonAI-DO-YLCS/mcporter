@@ -36,8 +36,16 @@ export async function generateCli(
     throw new Error('--bundler bun currently requires --runtime bun.');
   }
   const timeoutMs = options.timeoutMs ?? 30_000;
-  const { definition, name } = await resolveServerDefinition(options.serverRef, options.configPath, options.rootDir);
-  const tools = await fetchTools(definition, name, options.configPath, options.rootDir);
+  const { definition: baseDefinition, name } = await resolveServerDefinition(
+    options.serverRef,
+    options.configPath,
+    options.rootDir
+  );
+  const { tools, derivedDescription } = await fetchTools(baseDefinition, name, options.configPath, options.rootDir);
+  const definition =
+    baseDefinition.description || !derivedDescription
+      ? baseDefinition
+      : { ...baseDefinition, description: derivedDescription };
   const toolMetadata: ToolMetadata[] = tools.map((tool) => buildToolMetadata(tool));
   const generator = await readPackageMetadata();
   const baseInvocation = ensureInvocationDefaults(

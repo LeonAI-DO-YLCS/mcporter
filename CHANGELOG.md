@@ -3,13 +3,11 @@
 ## [Unreleased]
 
 ### Code generation
+- When a server definition omits `description`, `mcporter generate-cli` now asks the MCP server for its own `instructions`/`serverInfo.title` during tool discovery and embeds that value, so generated CLIs introduce themselves with the real server description instead of the generic “Standalone CLI…” fallback.
+- Embedded tool listings inside generated CLIs now show each command’s flag signature (no `usage:` prefix) separated by blank lines, and per-command `--help` output inherits the same colorized usage/option styling as the main `mcporter` binary for readability on rich TTYs.
 - Added a `--bundler rolldown|bun` flag to `mcporter generate-cli`, defaulting to Rolldown but allowing Bun’s bundler (when paired with `--runtime bun`) for teams that want to stay entirely inside the Bun toolchain. The generator now records the chosen bundler in artifact metadata and enforces the Bun-only constraint so reproduction via `--from` stays deterministic.
 - When Bun is installed (and therefore selected as the runtime), `mcporter generate-cli` now automatically switches the bundler to Bun as well—no need to pass `--bundler bun` manually—while keeping Rolldown as the default for Node runtimes.
 - Bundling with Bun copies the generated template into mcporter’s install tree before invoking `bun build`, ensuring local `commander`/`mcporter` dependencies resolve even when the user runs the generator from an empty temp directory.
-
-### Testing
-- Added an integration test that exercises `mcporter generate-cli --bundler bun --runtime bun --bundle …`, verifying the emitted Bun bundle executes correctly and lists embedded tools before we attempt a release.
-- Expanded the generate-cli integration suite to compile with both Rolldown (default) and Bun bundlers, so CI exercises each path end-to-end (bundle + binary) whenever Bun is present.
 
 ## [0.3.2] - 2025-11-07
 

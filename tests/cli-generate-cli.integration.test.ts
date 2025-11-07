@@ -49,7 +49,7 @@ describe('mcporter CLI integration', () => {
     await ensureDistBuilt();
     const app = express();
     app.use(express.json());
-    const server = new McpServer({ name: 'context7', version: '1.0.0' });
+    const server = new McpServer({ name: 'context7', title: 'Context7 integration harness', version: '1.0.0' });
     server.registerTool(
       'ping',
       {
@@ -137,6 +137,7 @@ describe('mcporter CLI integration', () => {
       });
     });
     expect(helpOutput.stdout).toMatch(/Usage: .+ <command> \[options]/);
+    expect(helpOutput.stdout).toContain('Context7 integration harness');
     await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
   });
 
@@ -183,8 +184,9 @@ describe('mcporter CLI integration', () => {
       });
     });
     expect(helpOutput.stdout).toMatch(/Usage: .+ <command> \[options]/);
+    expect(helpOutput.stdout).toContain('Context7 integration harness');
     expect(helpOutput.stdout).toContain('ping - Simple health check');
-    expect(helpOutput.stdout).toContain('usage: ping --echo <echo:string>');
+    expect(helpOutput.stdout).toContain('--echo <echo:string>');
     await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
   });
 
@@ -232,8 +234,9 @@ describe('mcporter CLI integration', () => {
       });
     });
     expect(helpOutput.stdout).toMatch(/Usage: .+ <command> \[options]/);
+    expect(helpOutput.stdout).toContain('Context7 integration harness');
     expect(helpOutput.stdout).toContain('ping - Simple health check');
-    expect(helpOutput.stdout).toContain('usage: ping --echo <echo:string>');
+    expect(helpOutput.stdout).toContain('--echo <echo:string>');
 
     await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
   });
@@ -283,7 +286,7 @@ describe('mcporter CLI integration', () => {
     });
     expect(helpOutput.stdout).toMatch(/Usage: .+ <command> \[options]/);
     expect(helpOutput.stdout).toContain('ping - Simple health check');
-    expect(helpOutput.stdout).toContain('usage: ping --echo <echo:string>');
+    expect(helpOutput.stdout).toContain('--echo <echo:string>');
 
     await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
   });
@@ -361,7 +364,7 @@ await new Promise((resolve) => {
       });
     });
     expect(stdout).toContain('echo - Return the provided text');
-    expect(stdout).toContain('usage: echo --text <text>');
+    expect(stdout).toContain('--text <text>');
 
     await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
   });
