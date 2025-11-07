@@ -173,16 +173,6 @@ describe('mcporter CLI integration', () => {
 
     const stats = await fs.stat(bundlePath);
     expect(stats.isFile()).toBe(true);
-    const { stdout } = await new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
-      execFile(bundlePath, ['list-tools'], { env: process.env }, (error, stdout, stderr) => {
-        if (error) {
-          reject(error);
-          return;
-        }
-        resolve({ stdout, stderr });
-      });
-    });
-    expect(stdout.toLowerCase()).toContain('ping - simple health check');
     const helpOutput = await new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
       execFile(bundlePath, [], { env: process.env }, (error, stdout, stderr) => {
         if (error) {
@@ -193,6 +183,8 @@ describe('mcporter CLI integration', () => {
       });
     });
     expect(helpOutput.stdout).toMatch(/Usage: .+ <command> \[options]/);
+    expect(helpOutput.stdout).toContain('ping - Simple health check');
+    expect(helpOutput.stdout).toContain('usage: ping --echo <echo:string>');
     await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
   });
 
@@ -230,16 +222,6 @@ describe('mcporter CLI integration', () => {
     const stats = await fs.stat(binaryPath);
     expect(stats.isFile()).toBe(true);
 
-    const { stdout } = await new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
-      execFile(binaryPath, ['list-tools'], { env: process.env }, (error, stdout, stderr) => {
-        if (error) {
-          reject(error);
-          return;
-        }
-        resolve({ stdout, stderr });
-      });
-    });
-    expect(stdout.toLowerCase()).toContain('ping - simple health check');
     const helpOutput = await new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
       execFile(binaryPath, [], { env: process.env }, (error, stdout, stderr) => {
         if (error) {
@@ -250,6 +232,8 @@ describe('mcporter CLI integration', () => {
       });
     });
     expect(helpOutput.stdout).toMatch(/Usage: .+ <command> \[options]/);
+    expect(helpOutput.stdout).toContain('ping - Simple health check');
+    expect(helpOutput.stdout).toContain('usage: ping --echo <echo:string>');
 
     await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
   });
@@ -288,16 +272,6 @@ describe('mcporter CLI integration', () => {
     const stats = await fs.stat(binaryPath);
     expect(stats.isFile()).toBe(true);
 
-    const { stdout } = await new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
-      execFile(binaryPath, ['list-tools'], { env: process.env }, (error, stdout, stderr) => {
-        if (error) {
-          reject(error);
-          return;
-        }
-        resolve({ stdout, stderr });
-      });
-    });
-    expect(stdout.toLowerCase()).toContain('ping - simple health check');
     const helpOutput = await new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
       execFile(binaryPath, [], { env: process.env }, (error, stdout, stderr) => {
         if (error) {
@@ -308,6 +282,8 @@ describe('mcporter CLI integration', () => {
       });
     });
     expect(helpOutput.stdout).toMatch(/Usage: .+ <command> \[options]/);
+    expect(helpOutput.stdout).toContain('ping - Simple health check');
+    expect(helpOutput.stdout).toContain('usage: ping --echo <echo:string>');
 
     await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
   });
@@ -376,7 +352,7 @@ await new Promise((resolve) => {
     expect(stats.isFile()).toBe(true);
 
     const { stdout } = await new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
-      execFile(binaryPath, ['list-tools'], { env: process.env }, (error, stdout, stderr) => {
+      execFile(binaryPath, [], { env: process.env }, (error, stdout, stderr) => {
         if (error) {
           reject(error);
           return;
@@ -385,6 +361,7 @@ await new Promise((resolve) => {
       });
     });
     expect(stdout).toContain('echo - Return the provided text');
+    expect(stdout).toContain('usage: echo --text <text>');
 
     await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
   });
