@@ -24,6 +24,7 @@ summary: 'Plan for the mcporter package replacing the Sweetistics pnpm MCP helpe
 ## Architecture Notes
 - Load MCP definitions from JSON (support relative paths + HTTPS).
 - Reuse `@modelcontextprotocol/sdk` transports; invoke stdio servers directly (e.g., call `npx` with env overrides) without an extra wrapper script.
+- Automatically detect OAuth requirements for ad-hoc HTTP servers by retrying failed handshakes and promoting the definition to `auth: "oauth"` when a 401/403 is encountered, then launching the browser flow immediately.
 - Mirror Python helper behavior:
   - `${VAR}`, `${VAR:-default}`, `$env:VAR` interpolation.
 - Optional OAuth token cache directory handling (defaulting to `~/.mcporter/<server>` when none is provided).

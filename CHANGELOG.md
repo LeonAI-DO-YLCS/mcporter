@@ -13,6 +13,7 @@
 - Flag-style tool invocations now accept `key:value` and `key: value` alongside the existing `key=value` form, making commands like `mcporter context7.resolve-library-id libraryName:value` Just Work. Documented in the README/call syntax guide and covered by `tests/cli-call.test.ts`.
 - Added `docs/tool-calling.md`, a cheatsheet summarizing every supported invocation pattern (inferred verbs, flag styles, function-call syntax, and ad-hoc URL workflows).
 - Function-call syntax now allows unlabeled arguments; mcporter maps them to schema order after any explicitly named parameters (e.g. `mcporter 'context7.resolve-library-id("react")'`). Tests in `tests/cli-call.test.ts` cover the positional fallback.
+- Ad-hoc HTTP servers that respond with 401/403 are automatically promoted to OAuth mode (no manual config edits needed) and trigger the browser sign-in flow on the next attempt. The helper is covered in `tests/runtime-oauth-detection.test.ts`, and the workflow is documented in `README.md` / `docs/adhoc.md` / `docs/spec.md`.
 
 ## [0.3.0] - 2025-11-06
 

@@ -1,6 +1,7 @@
 import type { ChildProcess } from 'node:child_process';
 import { execFile } from 'node:child_process';
 import fs from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import { UnauthorizedError } from '@modelcontextprotocol/sdk/client/auth.js';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
@@ -250,73 +251,114 @@ class McpRuntime implements Runtime {
   private async createClient(definition: ServerDefinition, options: ConnectOptions = {}): Promise<ClientContext> {
     // Create a fresh MCP client context for the target server.
     const client = new Client(this.clientInfo);
+    let activeDefinition = definition;
 
-    return withEnvOverrides(definition.env, async () => {
-      let oauthSession: OAuthSession | undefined;
-      const shouldEstablishOAuth = definition.auth === 'oauth' && options.maxOAuthAttempts !== 0;
-      if (shouldEstablishOAuth) {
-        oauthSession = await createOAuthSession(definition, this.logger);
-      }
-
-      if (definition.command.kind === 'stdio') {
+    return withEnvOverrides(activeDefinition.env, async () => {
+      if (activeDefinition.command.kind === 'stdio') {
         const resolvedEnv =
-          definition.env && Object.keys(definition.env).length > 0
+          activeDefinition.env && Object.keys(activeDefinition.env).length > 0
             ? Object.fromEntries(
-                Object.entries(definition.env)
+                Object.entries(activeDefinition.env)
                   .map(([key, raw]) => [key, resolveEnvValue(raw)])
                   .filter(([, value]) => value !== '')
               )
             : undefined;
         const transport = new StdioClientTransport({
-          command: definition.command.command,
-          args: definition.command.args,
-          cwd: definition.command.cwd,
+          command: activeDefinition.command.command,
+          args: activeDefinition.command.args,
+          cwd: activeDefinition.command.cwd,
           env: resolvedEnv,
         });
         await client.connect(transport);
-        return { client, transport, definition, oauthSession };
+        return { client, transport, definition: activeDefinition, oauthSession: undefined };
       }
 
-      const resolvedHeaders = materializeHeaders(definition.command.headers, definition.name);
+      // HTTP transports may need to retry once OAuth is auto-enabled.
+      while (true) {
+        const command = activeDefinition.command;
+        if (command.kind !== 'http') {
+          throw new Error(`Server '${activeDefinition.name}' is not configured for HTTP transport.`);
+        }
+        let oauthSession: OAuthSession | undefined;
+        const shouldEstablishOAuth = activeDefinition.auth === 'oauth' && options.maxOAuthAttempts !== 0;
+        if (shouldEstablishOAuth) {
+          oauthSession = await createOAuthSession(activeDefinition, this.logger);
+        }
 
-      const requestInit: RequestInit | undefined = resolvedHeaders
-        ? { headers: resolvedHeaders as HeadersInit }
-        : undefined;
+        const resolvedHeaders = materializeHeaders(command.headers, activeDefinition.name);
 
-      const baseOptions = {
-        requestInit,
-        authProvider: oauthSession?.provider,
-      };
+        const requestInit: RequestInit | undefined = resolvedHeaders
+          ? { headers: resolvedHeaders as HeadersInit }
+          : undefined;
 
-      const streamableTransport = new StreamableHTTPClientTransport(definition.command.url, baseOptions);
+        const baseOptions = {
+          requestInit,
+          authProvider: oauthSession?.provider,
+        };
 
-      try {
+        const attemptConnect = async () => {
+          const streamableTransport = new StreamableHTTPClientTransport(command.url, baseOptions);
+          try {
+            await this.connectWithAuth(
+              client,
+              streamableTransport,
+              oauthSession,
+              activeDefinition.name,
+              options.maxOAuthAttempts
+            );
+            return {
+              client,
+              transport: streamableTransport,
+              definition: activeDefinition,
+              oauthSession,
+            } as ClientContext;
+          } catch (error) {
+            await closeTransportAndWait(this.logger, streamableTransport).catch(() => {});
+            throw error;
+          }
+        };
+
         try {
-          await this.connectWithAuth(
-            client,
-            streamableTransport,
-            oauthSession,
-            definition.name,
-            options.maxOAuthAttempts
-          );
-          return {
-            client,
-            transport: streamableTransport,
-            definition,
-            oauthSession,
-          };
-        } catch (error) {
-          await closeTransportAndWait(this.logger, streamableTransport).catch(() => {});
-          this.logger.info(`Falling back to SSE transport for '${definition.name}': ${(error as Error).message}`);
-          const sseTransport = new SSEClientTransport(definition.command.url, {
+          return await attemptConnect();
+        } catch (primaryError) {
+          if (primaryError instanceof UnauthorizedError) {
+            await oauthSession?.close().catch(() => {});
+            const promoted = maybeEnableOAuth(activeDefinition, this.logger);
+            if (promoted && options.maxOAuthAttempts !== 0) {
+              activeDefinition = promoted;
+              this.definitions.set(promoted.name, promoted);
+              continue;
+            }
+          }
+          if (primaryError instanceof Error) {
+            this.logger.info(`Falling back to SSE transport for '${activeDefinition.name}': ${primaryError.message}`);
+          }
+          const sseTransport = new SSEClientTransport(command.url, {
             ...baseOptions,
           });
-          await this.connectWithAuth(client, sseTransport, oauthSession, definition.name, options.maxOAuthAttempts);
-          return { client, transport: sseTransport, definition, oauthSession };
+          try {
+            await this.connectWithAuth(
+              client,
+              sseTransport,
+              oauthSession,
+              activeDefinition.name,
+              options.maxOAuthAttempts
+            );
+            return { client, transport: sseTransport, definition: activeDefinition, oauthSession };
+          } catch (sseError) {
+            await closeTransportAndWait(this.logger, sseTransport).catch(() => {});
+            await oauthSession?.close().catch(() => {});
+            if (sseError instanceof UnauthorizedError && options.maxOAuthAttempts !== 0) {
+              const promoted = maybeEnableOAuth(activeDefinition, this.logger);
+              if (promoted) {
+                activeDefinition = promoted;
+                this.definitions.set(promoted.name, promoted);
+                continue;
+              }
+            }
+            throw sseError;
+          }
         }
-      } catch (error) {
-        await oauthSession?.close().catch(() => {});
-        throw error;
       }
     });
   }
@@ -365,6 +407,30 @@ class McpRuntime implements Runtime {
     }
   }
 }
+
+function maybeEnableOAuth(definition: ServerDefinition, logger: RuntimeLogger): ServerDefinition | undefined {
+  if (definition.auth === 'oauth') {
+    return undefined;
+  }
+  if (definition.command.kind !== 'http') {
+    return undefined;
+  }
+  const isAdHocSource = definition.source && definition.source.kind === 'local' && definition.source.path === '<adhoc>';
+  if (!isAdHocSource) {
+    return undefined;
+  }
+  const tokenCacheDir = definition.tokenCacheDir ?? path.join(os.homedir(), '.mcporter', definition.name);
+  logger.info(`Detected OAuth requirement for '${definition.name}'. Launching browser flow...`);
+  return {
+    ...definition,
+    auth: 'oauth',
+    tokenCacheDir,
+  };
+}
+
+export const __test = {
+  maybeEnableOAuth,
+};
 
 // closeTransportAndWait closes the transport and ensures its backing process exits.
 async function closeTransportAndWait(

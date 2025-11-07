@@ -1,6 +1,6 @@
 # Ad-hoc MCP Servers
 
-`mcporter` is gaining support for "just try it" workflows where you point the CLI at a raw MCP endpoint without first editing a config file. This doc tracks the behavior and heuristics we use to make that experience smooth while keeping the runtime predictable.
+mcporter is gaining support for "just try it" workflows where you point the CLI at a raw MCP endpoint without first editing a config file. This doc tracks the behavior and heuristics we use to make that experience smooth while keeping the runtime predictable.
 
 ## Entry Points
 
@@ -22,10 +22,19 @@ You can also pass a bare URL as the selector (`mcporter list https://mcp.linear.
 - `--name` wins when provided.
 - Otherwise we derive a slug:
   - HTTP: `<host>` plus a sanitized path fragment (e.g. `mcp-linear-app-mcp`).
-  - STDIO: executable basename + script (`node-mcp-server`).
+  - STDIO: executable basename + script (`node-singlestep`).
 - The inferred name is printed so you know what to reuse later. If you don’t persist the definition, run `mcporter auth https://mcp.linear.app/mcp` (or supply `--name linear` so `mcporter auth linear` also works) to finish OAuth with the same settings.
 
 This name becomes the cache key for OAuth tokens and log preferences, so repeated ad-hoc calls still benefit from credential reuse.
+
+## OAuth Auto-Detection
+
+Many hosted MCP servers (Supabase, Vercel, etc.) advertise OAuth capabilities but expect clients to discover this dynamically. When an ad-hoc HTTP server responds with `401/403` during the initial handshake, mcporter now:
+
+1. **Promotes the definition to OAuth** and spins up the default browser flow—no need to edit config or supply `auth: "oauth"` manually.
+2. **Persists the change** whenever you pass `--persist`, so future runs remember that the endpoint requires OAuth without repeating the detection step.
+
+The CLI still avoids surprise prompts during `mcporter list`; the upgrade happens the first time you run `mcporter auth <url>` or any other command that allows OAuth (i.e., not in `--autoAuthorize=false` mode).
 
 ## Auth & Persistence
 
