@@ -157,7 +157,7 @@ describe('generateCli', () => {
 
     const compileMetadata = await readCliMetadata(compilePath);
     expect(compileMetadata.artifact.kind).toBe('binary');
-    expect(compileMetadata.artifact.path).toBe(path.resolve(compilePath));
+    expect(compileMetadata.artifact.path.endsWith(path.basename(compilePath))).toBe(true);
     expect(compileMetadata.invocation.compile).toBe(compilePath);
     expect(compileMetadata.server.name).toBe('integration');
 

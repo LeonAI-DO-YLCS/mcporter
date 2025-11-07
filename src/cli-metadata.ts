@@ -1,5 +1,5 @@
+import { spawn } from 'node:child_process';
 import fs from 'node:fs/promises';
-import path from 'node:path';
 import type { ServerDefinition, ServerSource } from './config.js';
 
 export type CliArtifactKind = 'template' | 'bundle' | 'binary';
@@ -55,52 +55,71 @@ export interface CliArtifactMetadata {
   };
 }
 
-export interface WriteCliMetadataOptions {
-  readonly artifactPath: string;
-  readonly kind: CliArtifactKind;
-  readonly generator: { name: string; version: string };
-  readonly server: {
-    name: string;
-    source?: ServerSource;
-    definition: ServerDefinition;
-  };
-  readonly invocation: CliArtifactMetadata['invocation'];
-}
-
-// writeCliMetadata persists CLI build metadata next to the generated artifact and returns the metadata path.
-export async function writeCliMetadata(options: WriteCliMetadataOptions): Promise<string> {
-  const metadata: CliArtifactMetadata = {
-    schemaVersion: 1,
-    generatedAt: new Date().toISOString(),
-    generator: options.generator,
-    server: {
-      name: options.server.name,
-      source: options.server.source,
-      definition: serializeDefinition(options.server.definition),
-    },
-    artifact: {
-      path: path.resolve(options.artifactPath),
-      kind: options.kind,
-    },
-    invocation: options.invocation,
-  };
-
-  const metadataPath = metadataPathForArtifact(options.artifactPath);
-  await fs.mkdir(path.dirname(metadataPath), { recursive: true });
-  await fs.writeFile(metadataPath, JSON.stringify(metadata, null, 2), 'utf8');
-  return metadataPath;
-}
-
 // metadataPathForArtifact derives the metadata file path for a given artifact output path.
 export function metadataPathForArtifact(artifactPath: string): string {
   return `${artifactPath}.metadata.json`;
 }
 
-// readCliMetadata reads the persisted metadata file for a generated CLI artifact.
+// readCliMetadata loads metadata for a generated CLI artifact, preferring the embedded
+// inspect command and falling back to legacy sidecar files.
 export async function readCliMetadata(artifactPath: string): Promise<CliArtifactMetadata> {
-  const target = metadataPathForArtifact(artifactPath);
-  const buffer = await fs.readFile(target, 'utf8');
-  return JSON.parse(buffer) as CliArtifactMetadata;
+  const legacyPath = metadataPathForArtifact(artifactPath);
+  try {
+    const buffer = await fs.readFile(legacyPath, 'utf8');
+    return JSON.parse(buffer) as CliArtifactMetadata;
+  } catch (error) {
+    if (!isErrno(error, 'ENOENT')) {
+      throw error;
+    }
+  }
+  return await readMetadataFromCli(artifactPath);
+}
+
+async function readMetadataFromCli(artifactPath: string): Promise<CliArtifactMetadata> {
+  return await new Promise<CliArtifactMetadata>((resolve, reject) => {
+    const child = spawn(artifactPath, ['__mcporter_inspect'], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.setEncoding('utf8');
+    child.stdout.on('data', (data) => {
+      stdout += String(data);
+    });
+    child.stderr.setEncoding('utf8');
+    child.stderr.on('data', (data) => {
+      stderr += String(data);
+    });
+    child.on('error', (error) => reject(error));
+    child.on('close', (code) => {
+      if (code !== 0) {
+        reject(
+          new Error(
+            `Failed to inspect CLI artifact at ${artifactPath}${
+              stderr ? `: ${stderr.trim()}` : ''
+            } (exit code ${code ?? -1})`
+          )
+        );
+        return;
+      }
+      try {
+        const parsed = JSON.parse(stdout) as CliArtifactMetadata;
+        resolve(parsed);
+      } catch (error) {
+        reject(
+          new Error(
+            `Unable to parse embedded metadata from ${artifactPath}: ${
+              error instanceof Error ? error.message : String(error)
+            }`
+          )
+        );
+      }
+    });
+  });
+}
+
+function isErrno(error: unknown, code: string): error is NodeJS.ErrnoException {
+  return Boolean(error && typeof error === 'object' && (error as NodeJS.ErrnoException).code === code);
 }
 
 // serializeDefinition converts an in-memory server definition into the metadata-friendly JSON form.

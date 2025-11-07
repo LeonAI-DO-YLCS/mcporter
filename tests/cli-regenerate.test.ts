@@ -95,6 +95,46 @@ describe('inspect/regenerate CLI artifacts', () => {
 
     logSpy.mockRestore();
   });
+
+  it('falls back to legacy metadata files when present', async () => {
+    await fs.mkdir(tmpDir, { recursive: true });
+    const artifactPath = path.join(tmpDir, 'legacy-artifact');
+    const script = '#!/usr/bin/env node\nconsole.log("noop");\n';
+    await fs.writeFile(artifactPath, script, 'utf8');
+    await fs.chmod(artifactPath, 0o755);
+
+    const metadata: CliArtifactMetadata = {
+      schemaVersion: 1,
+      generatedAt: new Date().toISOString(),
+      generator: { name: 'mcporter', version: '0.1.0' },
+      server: {
+        name: 'legacy',
+        source: { kind: 'local', path: '/tmp/config/mcporter.json' },
+        definition: {
+          name: 'legacy',
+          description: 'Legacy test server',
+          command: { kind: 'http', url: 'https://example.com/mcp' },
+        },
+      },
+      artifact: {
+        path: artifactPath,
+        kind: 'template',
+      },
+      invocation: {
+        serverRef: 'legacy',
+        configPath: '/tmp/config/mcporter.json',
+        runtime: 'node',
+        timeoutMs: 30_000,
+        minify: false,
+      },
+    };
+    await fs.writeFile(metadataPathForArtifact(artifactPath), JSON.stringify(metadata, null, 2), 'utf8');
+
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    await handleInspectCli([artifactPath]);
+    expect(logSpy.mock.calls.some((call) => String(call[0]).includes('legacy'))).toBe(true);
+    logSpy.mockRestore();
+  });
 });
 
 type ArtifactKind = 'template' | 'bundle' | 'binary';
@@ -102,7 +142,6 @@ type ArtifactKind = 'template' | 'bundle' | 'binary';
 async function writeMetadataFixture(kind: ArtifactKind): Promise<string> {
   await fs.mkdir(tmpDir, { recursive: true });
   const artifactPath = path.join(tmpDir, `artifact-${kind}`);
-  await fs.writeFile(artifactPath, '', 'utf8');
 
   const definition = {
     name: 'vercel',
@@ -127,7 +166,7 @@ async function writeMetadataFixture(kind: ArtifactKind): Promise<string> {
     configPath: '/tmp/config/mcporter.json',
     rootDir: '/workspace',
     runtime: 'bun',
-    outputPath: kind === 'template' ? artifactPath : undefined,
+    outputPath: undefined,
     bundle: kind === 'bundle' ? artifactPath : undefined,
     compile: kind === 'binary' ? artifactPath : undefined,
     timeoutMs: 30000,
@@ -144,12 +183,32 @@ async function writeMetadataFixture(kind: ArtifactKind): Promise<string> {
       definition,
     },
     artifact: {
-      path: path.resolve(artifactPath),
+      path: artifactPath,
       kind,
     },
     invocation,
   };
 
-  await fs.writeFile(metadataPathForArtifact(artifactPath), JSON.stringify(metadata, null, 2), 'utf8');
+  const script = `#!/usr/bin/env node
+const payload = ${JSON.stringify(metadata)};
+if (process.argv[2] === '__mcporter_inspect') {
+  const artifactPath = process.argv[1] || payload.artifact.path;
+  payload.artifact.path = artifactPath;
+  payload.artifact.kind = ${JSON.stringify(kind)};
+  if (${JSON.stringify(kind)} === 'template') {
+    payload.invocation.outputPath = payload.invocation.outputPath || artifactPath;
+  } else if (${JSON.stringify(kind)} === 'bundle') {
+    payload.invocation.bundle = payload.invocation.bundle || artifactPath;
+  } else if (${JSON.stringify(kind)} === 'binary') {
+    payload.invocation.compile = payload.invocation.compile || artifactPath;
+  }
+  console.log(JSON.stringify(payload));
+  process.exit(0);
+}
+console.log('mock cli');
+`;
+
+  await fs.writeFile(artifactPath, script, 'utf8');
+  await fs.chmod(artifactPath, 0o755);
   return artifactPath;
 }
