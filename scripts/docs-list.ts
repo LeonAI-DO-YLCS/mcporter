@@ -15,7 +15,9 @@ function walkMarkdownFiles(dir: string, base: string = dir): string[] {
   const entries = readdirSync(dir, { withFileTypes: true });
   const files: string[] = [];
   for (const entry of entries) {
-    if (entry.name.startsWith('.')) continue;
+    if (entry.name.startsWith('.')) {
+      continue;
+    }
     const fullPath = join(dir, entry.name);
     if (entry.isDirectory()) {
       if (EXCLUDED_DIRS.has(entry.name)) {

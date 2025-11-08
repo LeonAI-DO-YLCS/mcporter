@@ -156,13 +156,23 @@ function shouldExtendTimeout(commandArgs: string[]): boolean {
     return false;
   }
 
-  const [first, ...rest] = tokens;
+  const first = tokens[0];
+  if (!first) {
+    return false;
+  }
+  const rest = tokens.slice(1);
 
   if (first === 'pnpm') {
     if (rest.length === 0) {
       return false;
     }
     const subcommand = rest[0];
+    if (!subcommand) {
+      return false;
+    }
+    if (!subcommand) {
+      return false;
+    }
     if (subcommand === 'run') {
       const script = rest[1];
       if (!script) {
@@ -218,13 +228,20 @@ function shouldUseLintTimeout(commandArgs: string[]): boolean {
     return false;
   }
 
-  const [first, ...rest] = tokens;
+  const first = tokens[0];
+  if (!first) {
+    return false;
+  }
+  const rest = tokens.slice(1);
 
   if (first === 'pnpm') {
     if (rest.length === 0) {
       return false;
     }
     const subcommand = rest[0];
+    if (!subcommand) {
+      return false;
+    }
     if (subcommand === 'run') {
       const script = rest[1];
       return typeof script === 'string' && script.startsWith('lint');
@@ -257,7 +274,11 @@ function isSingleTestInvocation(commandArgs: string[]): boolean {
     }
   }
 
-  const [first, ...rest] = tokens;
+  const first = tokens[0];
+  if (!first) {
+    return false;
+  }
+  const rest = tokens.slice(1);
   if (first === 'pnpm') {
     if (rest[0] === 'test:file') {
       return true;
@@ -293,6 +314,9 @@ function tokenReferencesIntegrationTest(token: string): boolean {
 function referencesIntegrationSpec(tokens: string[]): boolean {
   for (let index = 0; index < tokens.length; index += 1) {
     const token = tokens[index];
+    if (!token) {
+      continue;
+    }
     if (token === '--run' || token === '--include') {
       const next = tokens[index + 1];
       if (next && tokenReferencesIntegrationTest(next)) {
@@ -316,13 +340,34 @@ function matchesScriptKeyword(script: string, keywords: readonly string[]): bool
 function stripWrappersAndAssignments(args: string[]): string[] {
   const tokens = [...args];
 
-  while (tokens.length > 0 && isEnvAssignment(tokens[0])) {
+  while (tokens.length > 0) {
+    const candidate = tokens[0];
+    if (!candidate) {
+      break;
+    }
+    if (!isEnvAssignment(candidate)) {
+      break;
+    }
     tokens.shift();
   }
 
-  while (tokens.length > 0 && WRAPPER_COMMANDS.has(tokens[0])) {
+  while (tokens.length > 0) {
+    const wrapper = tokens[0];
+    if (!wrapper) {
+      break;
+    }
+    if (!WRAPPER_COMMANDS.has(wrapper)) {
+      break;
+    }
     tokens.shift();
-    while (tokens.length > 0 && isEnvAssignment(tokens[0])) {
+    while (tokens.length > 0) {
+      const assignment = tokens[0];
+      if (!assignment) {
+        break;
+      }
+      if (!isEnvAssignment(assignment)) {
+        break;
+      }
       tokens.shift();
     }
   }
@@ -344,6 +389,9 @@ function isTestRunnerSuiteInvocation(tokens: string[], suite: string): boolean {
   const normalizedSuite = suite.toLowerCase();
   for (let index = 0; index < tokens.length; index += 1) {
     const token = tokens[index];
+    if (!token) {
+      continue;
+    }
     const normalizedToken = token.replace(/^[./\\]+/, '');
     if (normalizedToken === 'scripts/test-runner.ts' || normalizedToken.endsWith('/scripts/test-runner.ts')) {
       const suiteToken = tokens[index + 1]?.toLowerCase();
@@ -363,7 +411,11 @@ function shouldUseLongTimeout(commandArgs: string[]): boolean {
     return false;
   }
 
-  const [first, ...rest] = tokens;
+  const first = tokens[0];
+  if (!first) {
+    return false;
+  }
+  const rest = tokens.slice(1);
   const matches = (token: string): boolean => matchesScriptKeyword(token, LONG_SCRIPT_KEYWORDS);
 
   if (first === 'pnpm') {
@@ -371,6 +423,9 @@ function shouldUseLongTimeout(commandArgs: string[]): boolean {
       return false;
     }
     const subcommand = rest[0];
+    if (!subcommand) {
+      return false;
+    }
     if (subcommand === 'run') {
       const script = rest[1];
       if (script && matches(script)) {
@@ -506,19 +561,22 @@ function buildExecutionParams(commandArgs: string[]): { command: string; args: s
   for (const token of commandArgs) {
     if (!commandStarted && isEnvAssignment(token)) {
       const [key, ...rest] = token.split('=');
-      env[key] = rest.join('=');
+      if (key) {
+        env[key] = rest.join('=');
+      }
       continue;
     }
     commandStarted = true;
     args.push(token);
   }
 
-  if (args.length === 0) {
+  if (args.length === 0 || !args[0]) {
     printUsage('Missing command to execute.');
     process.exit(1);
   }
 
-  return { command: args[0], args: args.slice(1), env };
+  const [command, ...restArgs] = args;
+  return { command, args: restArgs, env };
 }
 
 // Forwards termination signals to the child and returns an unregister hook.
@@ -818,7 +876,7 @@ async function buildFindDeletePlan(findArgs: string[], workspaceDir: string): Pr
     process.exit(exitCode);
   }
 
-  const matches = stdoutBuf.split('\0').filter((entry) => entry.length > 0);
+  const matches = stdoutBuf.split('\0').filter((entry: string) => entry.length > 0);
   if (matches.length === 0) {
     return { paths: [] };
   }
@@ -853,6 +911,9 @@ function parseRmArguments(argv: string[]): { targets: string[]; force: boolean; 
   let index = 1;
   while (index < argv.length) {
     const token = argv[index];
+    if (token === undefined) {
+      break;
+    }
     if (!treatAsTarget && token === '--') {
       treatAsTarget = true;
       index += 1;
@@ -894,6 +955,9 @@ function parseGitRmArguments(argv: string[], command: GitCommandInfo): GitRmPlan
   let index = command.index + 1;
   while (index < argv.length) {
     const token = argv[index];
+    if (token === undefined) {
+      break;
+    }
     if (!treatAsPath && token === '--') {
       treatAsPath = true;
       index += 1;
@@ -1002,7 +1066,7 @@ async function movePathsToTrash(
         stdout: 'ignore',
         stderr: 'pipe',
       });
-      const [exitCode, stderrText] = await Promise.all([proc.exited, proc.stderr?.text() ?? Promise.resolve('')]);
+      const [exitCode, stderrText] = await Promise.all([proc.exited, readProcessStream(proc.stderr)]);
       if (exitCode === 0) {
         return { missing, errors: [] };
       }

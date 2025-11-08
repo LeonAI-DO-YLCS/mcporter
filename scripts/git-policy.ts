@@ -56,6 +56,9 @@ export function findGitSubcommand(commandArgs: string[]): GitCommandInfo | null 
 
   while (index < commandArgs.length) {
     const token = commandArgs[index];
+    if (token === undefined) {
+      break;
+    }
     if (token === '--') {
       const next = commandArgs[index + 1];
       return next ? { name: next, index: index + 1 } : null;
@@ -83,6 +86,9 @@ export function determineGitWorkdir(baseDir: string, gitArgs: string[], command:
 
   while (index < limit) {
     const token = gitArgs[index];
+    if (token === undefined) {
+      break;
+    }
     if (token === '-C') {
       const next = gitArgs[index + 1];
       if (next) {
