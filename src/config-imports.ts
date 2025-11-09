@@ -34,15 +34,25 @@ export async function readExternalEntries(filePath: string): Promise<Map<string,
     return null;
   }
 
-  if (filePath.endsWith('.toml')) {
-    const buffer = await fs.readFile(filePath, 'utf8');
-    const parsed = parseToml(buffer) as Record<string, unknown>;
-    return extractFromCodexConfig(parsed);
+  const buffer = await fs.readFile(filePath, 'utf8');
+  if (!buffer.trim()) {
+    return new Map<string, RawEntry>();
   }
 
-  const buffer = await fs.readFile(filePath, 'utf8');
-  const parsed = JSON.parse(buffer) as unknown;
-  return extractFromMcpJson(parsed);
+  try {
+    if (filePath.endsWith('.toml')) {
+      const parsed = parseToml(buffer) as Record<string, unknown>;
+      return extractFromCodexConfig(parsed);
+    }
+
+    const parsed = JSON.parse(buffer) as unknown;
+    return extractFromMcpJson(parsed);
+  } catch (error) {
+    if (shouldIgnoreParseError(error)) {
+      return new Map<string, RawEntry>();
+    }
+    throw error;
+  }
 }
 
 export function toFileUrl(filePath: string): URL {
@@ -245,4 +255,14 @@ function asStringRecord(input: unknown): Record<string, string> | undefined {
     }
   }
   return Object.keys(record).length > 0 ? record : undefined;
+}
+
+function shouldIgnoreParseError(error: unknown): boolean {
+  if (error instanceof SyntaxError) {
+    return true;
+  }
+  if (!error || typeof error !== 'object') {
+    return false;
+  }
+  return 'fromTOML' in error;
 }

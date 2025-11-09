@@ -69,6 +69,39 @@ describe('config import helpers', () => {
     expect(testEntry?.headers?.Authorization).toBe('Bearer abc');
   });
 
+  it('treats empty JSON import files as having no entries', async () => {
+    await fs.mkdir(TEMP_DIR, { recursive: true });
+    const jsonPath = path.join(TEMP_DIR, 'claude.json');
+    await fs.writeFile(jsonPath, '\n', 'utf8');
+    const entries = await readExternalEntries(jsonPath);
+    expect(entries).toBeDefined();
+    expect(entries?.size ?? 0).toBe(0);
+  });
+
+  it('ignores malformed JSON import files', async () => {
+    await fs.mkdir(TEMP_DIR, { recursive: true });
+    const jsonPath = path.join(TEMP_DIR, 'broken.json');
+    await fs.writeFile(jsonPath, '{"oops":', 'utf8');
+    const entries = await readExternalEntries(jsonPath);
+    expect(entries).toBeDefined();
+    expect(entries?.size ?? 0).toBe(0);
+  });
+
+  it('ignores malformed TOML import files', async () => {
+    await fs.mkdir(TEMP_DIR, { recursive: true });
+    const tomlPath = path.join(TEMP_DIR, 'broken.toml');
+    await fs.writeFile(
+      tomlPath,
+      `[
+        baseUrl = "https://example.com"
+      `,
+      'utf8'
+    );
+    const entries = await readExternalEntries(tomlPath);
+    expect(entries).toBeDefined();
+    expect(entries?.size ?? 0).toBe(0);
+  });
+
   it('prefers config.toml when resolving Codex imports', () => {
     homedirSpy = vi.spyOn(os, 'homedir').mockReturnValue('/fake/home');
     const rootDir = '/repo/project';

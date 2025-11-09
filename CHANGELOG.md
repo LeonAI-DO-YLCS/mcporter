@@ -4,6 +4,12 @@
 
 _No changes yet._
 
+## [0.4.2] - 2025-11-09
+
+### CLI & runtime
+- `mcporter list` (and other commands that load imports) now skip empty or malformed Claude Desktop / Cursor / Codex config files instead of throwing, so a blank `claude_desktop_config.json` no longer blocks the rest of the imports.
+- Bundled sample config adds the Mobile Next MCP definition, making it available out of the box when you run `mcporter list` before customizing your own config.
+
 ## [0.4.1] - 2025-11-08
 
 ### CLI & runtime

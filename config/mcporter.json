@@ -11,6 +11,17 @@
         "npm_config_loglevel": "error"
       }
     },
+    "mobile-mcp": {
+      "description": "Mobile Next MCP server for automating iOS/Android simulators and devices.",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@mobilenext/mobile-mcp@latest"
+      ],
+      "env": {
+        "npm_config_loglevel": "error"
+      }
+    },
     "context7": {
       "description": "Context7 MCP for React documentation lookup.",
       "baseUrl": "https://mcp.context7.com/mcp"
