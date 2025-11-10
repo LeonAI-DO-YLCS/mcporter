@@ -22,6 +22,17 @@ export const DEFAULT_IMPORTS: ImportKind[] = [
   'vscode',
 ];
 
+const RawLifecycleSchema = z.union([
+  z.literal('keep-alive'),
+  z.literal('ephemeral'),
+  z.object({
+    mode: z.union([z.literal('keep-alive'), z.literal('ephemeral')]),
+    idleTimeoutMs: z.number().int().positive().optional(),
+  }),
+]);
+
+export type RawLifecycle = z.infer<typeof RawLifecycleSchema>;
+
 export const RawEntrySchema = z.object({
   description: z.string().optional(),
   baseUrl: z.string().optional(),
@@ -45,6 +56,7 @@ export const RawEntrySchema = z.object({
   bearer_token: z.string().optional(),
   bearerTokenEnv: z.string().optional(),
   bearer_token_env: z.string().optional(),
+  lifecycle: RawLifecycleSchema.optional(),
 });
 
 export const RawConfigSchema = z.object({
@@ -75,6 +87,15 @@ export interface ServerSource {
   readonly path: string;
 }
 
+export type ServerLifecycle =
+  | {
+      mode: 'keep-alive';
+      idleTimeoutMs?: number;
+    }
+  | {
+      mode: 'ephemeral';
+    };
+
 export interface ServerDefinition {
   readonly name: string;
   readonly description?: string;
@@ -85,6 +106,7 @@ export interface ServerDefinition {
   readonly clientName?: string;
   readonly oauthRedirectUrl?: string;
   readonly source?: ServerSource;
+  readonly lifecycle?: ServerLifecycle;
 }
 
 export interface LoadConfigOptions {

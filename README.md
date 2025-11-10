@@ -159,6 +159,13 @@ npx mcporter call --stdio "bun run ./local-server.ts" --name local-tools
 - Use `--allow-http` if you truly need to hit a cleartext endpoint.
 - See [docs/adhoc.md](docs/adhoc.md) for a deep dive (env overrides, cwd, OAuth).
 
+### Keep MCP servers warm with the daemon
+
+- `chrome-devtools`, `mobile-mcp`, and other stateful stdio servers auto-start a per-login daemon the first time you call them so Chrome tabs and device sessions stay alive between agents.
+- Use `mcporter daemon status` to check whether the daemon is running (and which servers are connected).
+- Stop it anytime with `mcporter daemon stop` (or `mcporter daemon start` to pre-warm before a long session).
+- All other servers stay ephemeral; add `"lifecycle": "keep-alive"` to a server entry (or set `MCPORTER_KEEPALIVE=name`) when you want the daemon to manage it.
+
 
 ## Friendlier Tool Calls
 

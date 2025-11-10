@@ -2,6 +2,7 @@ import os from 'node:os';
 import path from 'node:path';
 import type { CommandSpec, RawEntry, ServerDefinition, ServerSource } from './config-schema.js';
 import { expandHome } from './env.js';
+import { resolveLifecycle } from './lifecycle.js';
 
 export function normalizeServerEntry(
   name: string,
@@ -42,6 +43,8 @@ export function normalizeServerEntry(
   const resolvedTokenCacheDir =
     auth === 'oauth' ? (tokenCacheDir ?? path.join(os.homedir(), '.mcporter', name)) : (tokenCacheDir ?? undefined);
 
+  const lifecycle = resolveLifecycle(name, raw.lifecycle, command);
+
   return {
     name,
     description,
@@ -52,6 +55,7 @@ export function normalizeServerEntry(
     clientName,
     oauthRedirectUrl,
     source,
+    lifecycle,
   };
 }
 

@@ -5,6 +5,7 @@ import type { EphemeralServerSpec } from './cli/adhoc-server.js';
 import { handleCall as runHandleCall } from './cli/call-command.js';
 import { inferCommandRouting } from './cli/command-inference.js';
 import { handleConfigCli } from './cli/config-command.js';
+import { handleDaemonCli } from './cli/daemon-command.js';
 import { handleEmitTs } from './cli/emit-ts-command.js';
 import { extractEphemeralServerFlags } from './cli/ephemeral-flags.js';
 import { prepareEphemeralServerTarget } from './cli/ephemeral-target.js';
@@ -21,7 +22,11 @@ import { DEBUG_HANG, dumpActiveHandles, terminateChildProcesses } from './cli/ru
 import { boldText, dimText, extraDimText, supportsAnsiColor } from './cli/terminal.js';
 import { analyzeConnectionError } from './error-classifier.js';
 import { parseLogLevel } from './logging.js';
+import { resolveConfigPath } from './config.js';
 import { createRuntime, MCPORTER_VERSION } from './runtime.js';
+import { DaemonClient } from './daemon/client.js';
+import { createKeepAliveRuntime } from './daemon/runtime-wrapper.js';
+import { isKeepAliveServer } from './lifecycle.js';
 
 export { parseCallArguments } from './cli/call-arguments.js';
 export { handleCall } from './cli/call-command.js';
@@ -90,12 +95,23 @@ export async function runCli(argv: string[]): Promise<void> {
     return;
   }
 
+  const rootOverride = globalFlags['--root'];
+  const configResolution = resolveConfigPath(globalFlags['--config'], rootOverride ?? process.cwd());
+
   const runtimeOptions = {
-    configPath: globalFlags['--config'],
-    rootDir: globalFlags['--root'],
+    configPath: configResolution.path,
+    rootDir: rootOverride,
     logger: getActiveLogger(),
     oauthTimeoutMs: oauthTimeoutOverride,
   };
+
+  if (command === 'daemon') {
+    await handleDaemonCli(args, {
+      configPath: configResolution.path,
+      rootDir: rootOverride,
+    });
+    return;
+  }
 
   if (command === 'config') {
     await handleConfigCli(
@@ -118,7 +134,18 @@ export async function runCli(argv: string[]): Promise<void> {
     return;
   }
 
-  const runtime = await createRuntime(runtimeOptions);
+  const baseRuntime = await createRuntime(runtimeOptions);
+  const keepAliveServers = new Set(
+    baseRuntime
+      .getDefinitions()
+      .filter(isKeepAliveServer)
+      .map((entry) => entry.name)
+  );
+  const daemonClient =
+    keepAliveServers.size > 0
+      ? new DaemonClient({ configPath: configResolution.path, rootDir: rootOverride })
+      : null;
+  const runtime = createKeepAliveRuntime(baseRuntime, { daemonClient, keepAliveServers });
 
   const inference = inferCommandRouting(command, args, runtime.getDefinitions());
   if (inference.kind === 'abort') {
@@ -284,6 +311,16 @@ function buildCommandSections(colorize: boolean): string[] {
           name: 'config',
           summary: 'Inspect or edit config files (list, get, add, remove, import, login, logout)',
           usage: 'mcporter config <command> [options]',
+        },
+      ],
+    },
+    {
+      title: 'Daemon',
+      entries: [
+        {
+          name: 'daemon',
+          summary: 'Manage the keep-alive daemon (start | status | stop)',
+          usage: 'mcporter daemon <subcommand>',
         },
       ],
     },

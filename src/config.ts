@@ -25,6 +25,7 @@ export type {
   RawConfig,
   RawEntry,
   ServerDefinition,
+  ServerLifecycle,
   ServerSource,
   StdioCommand,
 } from './config-schema.js';
