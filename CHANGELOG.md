@@ -4,7 +4,7 @@
 
 _No changes yet._
 
-## [0.4.4] - 2025-11-10
+## [0.4.5] - 2025-11-10
 
 ### CLI & runtime
 - Fixed the npm `bin` entry so it points to `dist/cli.js` without a leading `./`, keeping the executable in the published tarball and restoring `npx mcporter` functionality. Also bumped the embedded runtime version to 0.4.4 so the CLI reports the correct release.
