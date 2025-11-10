@@ -4,6 +4,7 @@
 
 ### Docs
 - Consolidated the external MCP import matrix into `docs/import.md`, removing the short-lived `docs/mcp-import.md` duplication.
+- Clarified the release checklist to stop immediately on failing tests or lint warnings, and synced the runtime version constant with `package.json`.
 
 ## [0.4.3] - 2025-11-10
 
