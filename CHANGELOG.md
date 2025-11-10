@@ -16,9 +16,6 @@
 ### Code generation
 - Bundled CLIs now stage `jsonc-parser` alongside `commander`/`mcporter`, preventing `Cannot find module './impl/format'` errors when `generate-cli --bundle` runs inside temporary or dependency-less directories.
 
-### Tooling
-- Added `vitest.config.ts` and made `pnpm test` default to a quiet reporter (dot + `silent='passed-only'`), reducing CLI fixture spam in CI while keeping `pnpm test:verbose` available for full output.
-
 ## [0.4.5] - 2025-11-10
 
 ### CLI & runtime
