@@ -3,6 +3,11 @@
 ## [Unreleased]
 
 ### CLI & runtime
+- _Nothing yet._
+
+## [0.5.5] - 2025-11-11
+
+### CLI & runtime
 - Added hidden agent shortcuts: `mcporter describe <server>` now aliases `mcporter list`, and calling `<server>.help` automatically falls back to the list output when a server lacks a `help` tool (also wired into the legacy `pnpm mcp call` path) so agents always get a readable summary.
 
 ## [0.5.4] - 2025-11-10
