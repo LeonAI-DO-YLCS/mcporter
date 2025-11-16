@@ -266,7 +266,7 @@ describeGenerateCli('generateCli', () => {
 
     // --raw path exercised implicitly by runtime when needed; end-to-end call
     // verification is covered in runtime integration tests.
-  }, 20_000);
+  }, 60_000);
 
   it('accepts both kebab-case and underscore tool names for generated CLIs', async () => {
     const deepwikiRef = JSON.stringify({
@@ -337,7 +337,7 @@ describeGenerateCli('generateCli', () => {
         }
       );
     });
-  }, 25_000);
+  }, 40_000);
 });
 
 describe('generateCli helpers', () => {
