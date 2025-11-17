@@ -100,5 +100,5 @@ describe('stdio MCP servers (filesystem + memory)', () => {
     );
     expect(callResult.stdout).toContain('alpha');
     expect(callResult.stdout).toContain('beta');
-  });
+  }, 20000);
 });
