@@ -43,7 +43,7 @@
   },
   "dependencies": {
     "@iarna/toml": "^2.2.5",
-    "@modelcontextprotocol/sdk": "~1.21.2",
+    "@modelcontextprotocol/sdk": "^1.22.0",
     "acorn": "^8.15.0",
     "commander": "^14.0.2",
     "es-toolkit": "^1.42.0",

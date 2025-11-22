@@ -16,6 +16,7 @@ const CLI_ENTRY = fileURLToPath(new URL('../dist/cli.js', import.meta.url));
 const testRequire = createRequire(import.meta.url);
 const MCP_SERVER_MODULE = pathToFileURL(testRequire.resolve('@modelcontextprotocol/sdk/server/mcp.js')).href;
 const STDIO_SERVER_MODULE = pathToFileURL(testRequire.resolve('@modelcontextprotocol/sdk/server/stdio.js')).href;
+const ZOD_MODULE = pathToFileURL(path.join(process.cwd(), 'node_modules', 'zod', 'index.js')).href;
 
 async function ensureDistBuilt(): Promise<void> {
   try {
@@ -313,20 +314,15 @@ describe('mcporter CLI integration', () => {
     const scriptPath = path.join(tempDir, 'mock-stdio.mjs');
     const scriptSource = `import { McpServer } from '${MCP_SERVER_MODULE}';
 import { StdioServerTransport } from '${STDIO_SERVER_MODULE}';
+import { z } from '${ZOD_MODULE}';
 
 const server = new McpServer({ name: 'inline-cli', version: '1.0.0' });
 server.registerTool('echo', {
   title: 'Echo',
   description: 'Return the provided text',
-  inputSchema: {
-    type: 'object',
-    properties: { text: { type: 'string' } },
-    required: ['text'],
-  },
-  outputSchema: {
-    type: 'object',
-    properties: { text: { type: 'string' } },
-  },
+  // Use Zod schemas to keep SDK 1.22.x happy when converting to JSON Schema.
+  inputSchema: z.object({ text: z.string() }),
+  outputSchema: z.object({ text: z.string() }),
 }, async ({ text }) => ({
   content: [{ type: 'text', text }],
   structuredContent: { text },
