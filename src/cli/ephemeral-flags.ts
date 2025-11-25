@@ -27,7 +27,7 @@ export function extractEphemeralServerFlags(
       continue;
     }
 
-    if (token === '--http-url') {
+    if (token === '--http-url' || token === '--sse') {
       const value = args[index + 1];
       if (!value) {
         throw new Error("Flag '--http-url' requires a value.");
@@ -37,7 +37,7 @@ export function extractEphemeralServerFlags(
       continue;
     }
 
-    if (token === '--allow-http') {
+    if (token === '--allow-http' || token === '--insecure') {
       ensureSpec().allowInsecureHttp = true;
       args.splice(index, 1);
       continue;

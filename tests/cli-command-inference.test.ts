@@ -23,6 +23,11 @@ describe('command inference', () => {
     expect(result).toEqual({ kind: 'command', command: 'list', args: ['chrome-devtools'] });
   });
 
+  it('treats list-tools as a hidden list alias', () => {
+    const result = inferCommandRouting('list-tools', ['linear'], definitions);
+    expect(result).toEqual({ kind: 'command', command: 'list', args: ['linear'] });
+  });
+
   it('auto-corrects close server names', () => {
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
     const result = inferCommandRouting('vercek', [], definitions);

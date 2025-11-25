@@ -43,6 +43,14 @@ describe('CLI list flag parsing', () => {
     expect(args).toEqual(['server']);
   });
 
+  it('treats --sse as a hidden alias for --http-url in ad-hoc mode', async () => {
+    const { extractListFlags } = await cliModulePromise;
+    const args = ['--sse', 'https://mcp.example.com/sse', 'list'];
+    const flags = extractListFlags(args);
+    expect(flags.ephemeral).toEqual({ httpUrl: 'https://mcp.example.com/sse' });
+    expect(args).toEqual(['list']);
+  });
+
   it('honors --timeout when listing a single server', async () => {
     const { handleList } = await cliModulePromise;
     const definition: ServerDefinition = {

@@ -37,4 +37,18 @@ describe('extractEphemeralServerFlags', () => {
     });
     expect(args).toEqual([]);
   });
+
+  it('accepts --insecure as a hidden alias for --allow-http', () => {
+    const args = ['--http-url', 'http://mcp.example.com/mcp', '--insecure'];
+    const spec = extractEphemeralServerFlags(args);
+    expect(spec).toEqual({ httpUrl: 'http://mcp.example.com/mcp', allowInsecureHttp: true });
+    expect(args).toEqual([]);
+  });
+
+  it('accepts --sse as a hidden alias for --http-url', () => {
+    const args = ['--sse', 'https://mcp.example.com/sse'];
+    const spec = extractEphemeralServerFlags(args);
+    expect(spec).toEqual({ httpUrl: 'https://mcp.example.com/sse' });
+    expect(args).toEqual([]);
+  });
 });
