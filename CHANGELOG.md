@@ -1,11 +1,12 @@
 # mcporter Changelog
 
 ## [Unreleased]
+
+## [0.7.0] - 2025-12-06
 ### CLI
 - Centralized OAuth credentials in a shared vault (`~/.mcporter/.credentials.json`) while still honoring per-server `tokenCacheDir` when present; legacy per-server caches are migrated automatically.
 - `mcporter auth --reset` now clears the vault and legacy caches without crashing on corrupted credential files, making re-auth reliable for servers like Gmail.
 - StdIO servers that expose a separate auth subcommand (e.g., Gmail MCP) can now declare `oauthCommand.args`; `mcporter auth <server>` will spawn that helper and wait for browser completion, so Gmail auth now works without running npx manually.
-
 - Raw output now prints full strings without Node’s 10k-character truncation (`util.inspect` uses `maxStringLength: null`), so large MCP responses and plans are preserved end-to-end.
 - Added regression coverage to ensure future raw output changes cannot reintroduce truncation.
 
