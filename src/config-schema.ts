@@ -53,8 +53,8 @@ export const RawEntrySchema = z.object({
   command: z.union([z.string(), z.array(z.string())]).optional(),
   executable: z.string().optional(),
   args: z.array(z.string()).optional(),
-  headers: z.record(z.string()).optional(),
-  env: z.record(z.string()).optional(),
+  headers: z.record(z.string(), z.string()).optional(),
+  env: z.record(z.string(), z.string()).optional(),
   auth: z.string().optional(),
   tokenCacheDir: z.string().optional(),
   token_cache_dir: z.string().optional(),
@@ -81,7 +81,7 @@ export const RawEntrySchema = z.object({
 });
 
 export const RawConfigSchema = z.object({
-  mcpServers: z.record(RawEntrySchema),
+  mcpServers: z.record(z.string(), RawEntrySchema),
   imports: z.array(ImportKindSchema).optional(),
 });
 
