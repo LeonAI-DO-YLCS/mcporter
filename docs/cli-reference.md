@@ -40,6 +40,9 @@ A quick reference for the primary `mcporter` subcommands. Each command inherits
   - `--bundle <path>` – emit a bundle (Node/Bun) ready for `bun x`.
   - `--bundler rolldown|bun` – pick the bundler implementation (defaults to Rolldown unless the runtime resolves to Bun, in which case Bun’s bundler is used automatically; still requires a local Bun install).
   - `--compile <path>` – compile with Bun (implies `--runtime bun`).
+  - `--include-tools <a,b,c>` – only generate subcommands for the specified tools (exact MCP tool names). It is an error if any requested tool is missing.
+  - `--exclude-tools <a,b,c>` – generate subcommands for every tool except the ones listed. Unknown tool names are ignored. If all tools are excluded, generation fails.
+  - `--include-tools` and `--exclude-tools` are mutually exclusive.
   - `--timeout <ms>` / `--runtime node|bun` – shared via the generator flag
     parser so defaults stay consistent.
   - `--from <artifact>` – reuse metadata from an existing CLI artifact (legacy

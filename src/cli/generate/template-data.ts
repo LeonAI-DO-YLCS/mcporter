@@ -54,6 +54,12 @@ export function buildGenerateCliCommand(
   if (invocation.minify) {
     tokens.push('--minify');
   }
+  if (invocation.includeTools && invocation.includeTools.length > 0) {
+    tokens.push('--include-tools', invocation.includeTools.join(','));
+  }
+  if (invocation.excludeTools && invocation.excludeTools.length > 0) {
+    tokens.push('--exclude-tools', invocation.excludeTools.join(','));
+  }
   return tokens.map(shellQuote).join(' ');
 }
 
@@ -68,6 +74,8 @@ export function resolveGenerateRequestFromArtifact(
     timeout: number;
     compile?: GenerateCliOptions['compile'];
     minify?: boolean;
+    includeTools?: string[];
+    excludeTools?: string[];
   },
   metadata: CliArtifactMetadata,
   globalFlags: Record<string, string | undefined>
@@ -81,6 +89,19 @@ export function resolveGenerateRequestFromArtifact(
   if (!serverRef) {
     throw new Error('Unable to determine server definition from artifact; pass --server with a target name.');
   }
+
+  const includeTools = parsed.includeTools ?? invocation.includeTools;
+  const excludeTools = parsed.excludeTools ?? invocation.excludeTools;
+  if (includeTools && excludeTools) {
+    throw new Error('Cannot combine --include-tools and --exclude-tools.');
+  }
+  if (includeTools && includeTools.length === 0) {
+    throw new Error('--include-tools requires at least one tool name.');
+  }
+  if (excludeTools && excludeTools.length === 0) {
+    throw new Error('--exclude-tools requires at least one tool name.');
+  }
+
   return {
     serverRef,
     configPath: globalFlags['--config'] ?? invocation.configPath,
@@ -92,6 +113,8 @@ export function resolveGenerateRequestFromArtifact(
     timeoutMs: parsed.timeout ?? invocation.timeoutMs,
     compile: parsed.compile ?? invocation.compile,
     minify: parsed.minify ?? invocation.minify ?? false,
+    includeTools,
+    excludeTools,
   };
 }
 

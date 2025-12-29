@@ -136,6 +136,7 @@ describe('generate-cli runner internals', () => {
       timeoutMs: 45_000,
       minify: true,
       bundle: 'out.bundle.js',
+      includeTools: ['alpha', 'beta'],
     };
     const command = buildGenerateCliCommand(invocation, definition, { '--config': '/tmp/mcporter.json' });
     expect(command).toContain('--config /tmp/mcporter.json');
@@ -143,5 +144,13 @@ describe('generate-cli runner internals', () => {
     expect(command).toContain('--bundle out.bundle.js');
     expect(command).toContain('--timeout 45000');
     expect(command).toContain('--minify');
+    expect(command).toContain("--include-tools 'alpha,beta'");
+  });
+
+  it('parses include/exclude tool lists', () => {
+    const args = ['--include-tools', 'a,b', '--include-tools', 'b,c', '--exclude-tools', 'x, y'];
+    const parsed = parseGenerateFlags([...args]);
+    expect(parsed.includeTools).toEqual(['a', 'b', 'c']);
+    expect(parsed.excludeTools).toEqual(['x', 'y']);
   });
 });

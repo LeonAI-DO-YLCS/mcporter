@@ -306,6 +306,7 @@ Tip: you can drop `--command` when the inline command is the first positional ar
 - `--output <path>` writes the template somewhere specific.
 - `--runtime bun|node` picks the runtime for generated code (Bun required for `--compile`).
 - Add `--compile` to emit a Bun-compiled binary; MCPorter cleans up intermediate bundles when you omit `--bundle`.
+- Use `--include-tools a,b,c` or `--exclude-tools a,b,c` to generate a CLI for a subset of tools (mutually exclusive).
 - Use `--from <artifact>` (optionally `--dry-run`) to regenerate an existing CLI using its embedded metadata.
 - Prefer a positional shorthand if the server already lives in your config/imports:
   `npx mcporter generate-cli linear --bundle dist/linear.js`.

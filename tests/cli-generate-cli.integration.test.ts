@@ -19,19 +19,15 @@ const STDIO_SERVER_MODULE = pathToFileURL(testRequire.resolve('@modelcontextprot
 const ZOD_MODULE = pathToFileURL(path.join(process.cwd(), 'node_modules', 'zod', 'index.js')).href;
 
 async function ensureDistBuilt(): Promise<void> {
-  try {
-    await fs.access(CLI_ENTRY);
-  } catch {
-    await new Promise<void>((resolve, reject) => {
-      execFile('pnpm', ['build'], { cwd: process.cwd(), env: process.env }, (error) => {
-        if (error) {
-          reject(error);
-          return;
-        }
-        resolve();
-      });
+  await new Promise<void>((resolve, reject) => {
+    execFile('pnpm', ['build'], { cwd: process.cwd(), env: process.env }, (error) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+      resolve();
     });
-  }
+  });
 }
 
 async function hasBun(): Promise<boolean> {
@@ -74,6 +70,19 @@ describe('mcporter CLI integration', () => {
       async ({ echo }) => ({
         content: [{ type: 'text', text: JSON.stringify({ ok: true, echo: echo ?? 'hi' }) }],
         structuredContent: { ok: true, echo: echo ?? 'hi' },
+      })
+    );
+    server.registerTool(
+      'admin_reset',
+      {
+        title: 'Admin Reset',
+        description: 'Dangerous admin action',
+        inputSchema: { reason: z.string().optional() },
+        outputSchema: { ok: z.boolean() },
+      },
+      async () => ({
+        content: [{ type: 'text', text: JSON.stringify({ ok: true }) }],
+        structuredContent: { ok: true },
       })
     );
 
@@ -153,6 +162,167 @@ describe('mcporter CLI integration', () => {
     expect(helpOutput.stdout).toContain('Context7 integration harness');
     await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
   });
+
+  it('filters generated CLI tools via --include-tools/--exclude-tools', async () => {
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'mcporter-cli-filter-'));
+    await fs.writeFile(
+      path.join(tempDir, 'package.json'),
+      JSON.stringify({ name: 'mcporter-cli-filter', version: '0.0.0' }, null, 2),
+      'utf8'
+    );
+
+    const includePath = path.join(tempDir, 'context7-include.js');
+    await new Promise<void>((resolve, reject) => {
+      execFile(
+        process.execPath,
+        [
+          CLI_ENTRY,
+          'generate-cli',
+          '--command',
+          baseUrl.toString(),
+          '--runtime',
+          'node',
+          '--bundle',
+          includePath,
+          '--include-tools',
+          'ping',
+        ],
+        { cwd: tempDir, env: { ...process.env, MCPORTER_NO_FORCE_EXIT: '1' } },
+        (error) => {
+          if (error) {
+            reject(error);
+            return;
+          }
+          resolve();
+        }
+      );
+    });
+    const includeHelp = await new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
+      execFile(process.execPath, [includePath], { env: process.env }, (error, stdout, stderr) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        resolve({ stdout, stderr });
+      });
+    });
+    expect(includeHelp.stdout).toContain('ping - Simple health check');
+    expect(includeHelp.stdout).not.toContain('admin-reset');
+
+    const excludePath = path.join(tempDir, 'context7-exclude.js');
+    await new Promise<void>((resolve, reject) => {
+      execFile(
+        process.execPath,
+        [
+          CLI_ENTRY,
+          'generate-cli',
+          '--command',
+          baseUrl.toString(),
+          '--runtime',
+          'node',
+          '--bundle',
+          excludePath,
+          '--exclude-tools',
+          'ping',
+        ],
+        { cwd: tempDir, env: { ...process.env, MCPORTER_NO_FORCE_EXIT: '1' } },
+        (error) => {
+          if (error) {
+            reject(error);
+            return;
+          }
+          resolve();
+        }
+      );
+    });
+    const excludeHelp = await new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
+      execFile(process.execPath, [excludePath], { env: process.env }, (error, stdout, stderr) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        resolve({ stdout, stderr });
+      });
+    });
+    expect(excludeHelp.stdout).not.toContain('ping - Simple health check');
+    expect(excludeHelp.stdout).toContain('admin-reset');
+
+    await new Promise<void>((resolve) => {
+      execFile(
+        process.execPath,
+        [
+          CLI_ENTRY,
+          'generate-cli',
+          '--command',
+          baseUrl.toString(),
+          '--runtime',
+          'node',
+          '--bundle',
+          path.join(tempDir, 'context7-missing.js'),
+          '--include-tools',
+          'missing-tool',
+        ],
+        { cwd: tempDir, env: { ...process.env, MCPORTER_NO_FORCE_EXIT: '1' } },
+        (error, stdout, stderr) => {
+          expect(error).toBeTruthy();
+          expect(`${stdout}\n${stderr}`).toMatch(/Requested tools not found|missing-tool/);
+          resolve();
+        }
+      );
+    });
+
+    await new Promise<void>((resolve) => {
+      execFile(
+        process.execPath,
+        [
+          CLI_ENTRY,
+          'generate-cli',
+          '--command',
+          baseUrl.toString(),
+          '--runtime',
+          'node',
+          '--bundle',
+          path.join(tempDir, 'context7-empty.js'),
+          '--include-tools',
+          ',',
+        ],
+        { cwd: tempDir, env: { ...process.env, MCPORTER_NO_FORCE_EXIT: '1' } },
+        (error, stdout, stderr) => {
+          expect(error).toBeTruthy();
+          expect(`${stdout}\n${stderr}`).toMatch(/--include-tools requires at least one/);
+          resolve();
+        }
+      );
+    });
+
+    await new Promise<void>((resolve) => {
+      execFile(
+        process.execPath,
+        [
+          CLI_ENTRY,
+          'generate-cli',
+          '--command',
+          baseUrl.toString(),
+          '--runtime',
+          'node',
+          '--bundle',
+          path.join(tempDir, 'context7-both.js'),
+          '--include-tools',
+          'ping',
+          '--exclude-tools',
+          'ping',
+        ],
+        { cwd: tempDir, env: { ...process.env, MCPORTER_NO_FORCE_EXIT: '1' } },
+        (error, stdout, stderr) => {
+          expect(error).toBeTruthy();
+          expect(`${stdout}\n${stderr}`).toMatch(/cannot be used together/);
+          resolve();
+        }
+      );
+    });
+
+    await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
+  }, 40_000);
 
   it('bundles with Bun automatically when runtime resolves to Bun', async () => {
     if (!(await ensureBunSupport('Bun bundler integration test'))) {

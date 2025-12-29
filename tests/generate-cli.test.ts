@@ -8,6 +8,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { readCliMetadata } from '../src/cli-metadata.js';
 import { generateCli, __test as generateCliInternals } from '../src/generate-cli.js';
+import type { ServerToolInfo } from '../src/runtime.js';
 
 const describeGenerateCli = process.platform === 'win32' ? describe.skip : describe;
 
@@ -520,7 +521,8 @@ describeGenerateCli('generateCli', () => {
 });
 
 describe('generateCli helpers', () => {
-  const { getEnumValues, getDescriptorDefault, buildPlaceholder, buildExampleValue } = generateCliInternals;
+  const { getEnumValues, getDescriptorDefault, buildPlaceholder, buildExampleValue, applyToolFilters } =
+    generateCliInternals;
 
   it('extracts enum candidates from descriptors', () => {
     expect(getEnumValues({ type: 'string', enum: ['a', 'b', 1] })).toEqual(['a', 'b']);
@@ -548,6 +550,19 @@ describe('generateCli helpers', () => {
     expect(buildPlaceholder('count', 'number')).toBe('<count:number>');
     expect(buildExampleValue('count', 'number', undefined, 3)).toBe('3');
     expect(buildExampleValue('path', 'string', undefined, undefined)).toBe('/path/to/file.md');
+  });
+
+  it('filters tools using include/exclude lists', () => {
+    const tools: ServerToolInfo[] = [{ name: 'a' }, { name: 'b' }, { name: 'c' }];
+    expect(applyToolFilters(tools, undefined, undefined).map((t) => t.name)).toEqual(['a', 'b', 'c']);
+    expect(applyToolFilters(tools, ['b', 'a'], undefined).map((t) => t.name)).toEqual(['b', 'a']);
+    expect(applyToolFilters(tools, undefined, ['b']).map((t) => t.name)).toEqual(['a', 'c']);
+    expect(applyToolFilters(tools, undefined, ['missing']).map((t) => t.name)).toEqual(['a', 'b', 'c']);
+
+    expect(() => applyToolFilters(tools, [], undefined)).toThrow(/--include-tools requires at least one/);
+    expect(() => applyToolFilters(tools, undefined, [])).toThrow(/--exclude-tools requires at least one/);
+    expect(() => applyToolFilters(tools, ['missing'], undefined)).toThrow(/Requested tools not found/);
+    expect(() => applyToolFilters(tools, undefined, ['a', 'b', 'c'])).toThrow(/All tools were excluded/);
   });
 });
 

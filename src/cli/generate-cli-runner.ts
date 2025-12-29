@@ -9,6 +9,15 @@ import { buildGenerateCliCommand, resolveGenerateRequestFromArtifact } from './g
 // handleGenerateCli parses flags and generates the requested standalone CLI.
 export async function handleGenerateCli(args: string[], globalFlags: FlagMap): Promise<void> {
   const parsed = parseGenerateFlags(args);
+  if (parsed.includeTools && parsed.excludeTools) {
+    throw new Error('--include-tools and --exclude-tools cannot be used together.');
+  }
+  if (parsed.includeTools && parsed.includeTools.length === 0) {
+    throw new Error('--include-tools requires at least one tool name.');
+  }
+  if (parsed.excludeTools && parsed.excludeTools.length === 0) {
+    throw new Error('--exclude-tools requires at least one tool name.');
+  }
   if (parsed.from && (parsed.command || parsed.description || parsed.name)) {
     throw new Error('--from cannot be combined with --command/--description/--name.');
   }
@@ -31,6 +40,8 @@ export async function handleGenerateCli(args: string[], globalFlags: FlagMap): P
           runtime: request.runtime ?? 'node',
           timeoutMs: request.timeoutMs ?? 30_000,
           minify: request.minify ?? false,
+          includeTools: request.includeTools,
+          excludeTools: request.excludeTools,
         },
         metadata.server.definition,
         globalFlags
@@ -65,5 +76,7 @@ export async function handleGenerateCli(args: string[], globalFlags: FlagMap): P
     timeoutMs: parsed.timeout,
     compile: parsed.compile,
     minify: parsed.minify ?? false,
+    includeTools: parsed.includeTools,
+    excludeTools: parsed.excludeTools,
   });
 }

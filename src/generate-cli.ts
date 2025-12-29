@@ -12,6 +12,7 @@ import { readPackageMetadata, writeTemplate } from './cli/generate/template.js';
 import type { ToolMetadata } from './cli/generate/tools.js';
 import { buildToolMetadata, toolsTestHelpers } from './cli/generate/tools.js';
 import { type CliArtifactMetadata, serializeDefinition } from './cli-metadata.js';
+import type { ServerToolInfo } from './runtime.js';
 
 export interface GenerateCliOptions {
   readonly serverRef: string;
@@ -24,6 +25,8 @@ export interface GenerateCliOptions {
   readonly timeoutMs?: number;
   readonly minify?: boolean;
   readonly compile?: boolean | string;
+  readonly includeTools?: string[];
+  readonly excludeTools?: string[];
 }
 
 // generateCli produces a standalone CLI (and optional bundle/binary) for a given MCP server.
@@ -41,7 +44,13 @@ export async function generateCli(
     options.configPath,
     options.rootDir
   );
-  const { tools, derivedDescription } = await fetchTools(baseDefinition, name, options.configPath, options.rootDir);
+  const { tools: allTools, derivedDescription } = await fetchTools(
+    baseDefinition,
+    name,
+    options.configPath,
+    options.rootDir
+  );
+  const tools = applyToolFilters(allTools, options.includeTools, options.excludeTools);
   const definition =
     baseDefinition.description || !derivedDescription
       ? baseDefinition
@@ -60,6 +69,8 @@ export async function generateCli(
       compile: options.compile,
       timeoutMs,
       minify: options.minify ?? false,
+      includeTools: options.includeTools,
+      excludeTools: options.excludeTools,
     },
     definition
   );
@@ -140,4 +151,61 @@ export async function generateCli(
   return { outputPath: options.outputPath ?? outputPath, bundlePath, compilePath };
 }
 
-export const __test = toolsTestHelpers;
+function applyToolFilters(tools: ServerToolInfo[], includeTools?: string[], excludeTools?: string[]): ServerToolInfo[] {
+  if (includeTools && excludeTools) {
+    throw new Error('Internal error: both includeTools and excludeTools provided to generateCli.');
+  }
+  if (includeTools && includeTools.length === 0) {
+    throw new Error('--include-tools requires at least one tool name.');
+  }
+  if (excludeTools && excludeTools.length === 0) {
+    throw new Error('--exclude-tools requires at least one tool name.');
+  }
+
+  if (!includeTools && !excludeTools) {
+    return tools;
+  }
+
+  const toolMap = new Map(tools.map((tool) => [tool.name, tool]));
+
+  if (includeTools && includeTools.length > 0) {
+    const result: ServerToolInfo[] = [];
+    const missing: string[] = [];
+
+    for (const name of includeTools) {
+      const match = toolMap.get(name);
+      if (match) {
+        result.push(match);
+      } else {
+        missing.push(name);
+      }
+    }
+
+    if (missing.length > 0) {
+      throw new Error(
+        `Requested tools not found on server: ${missing.join(', ')}. Available tools: ${tools.map((tool) => tool.name).join(', ')}`
+      );
+    }
+
+    if (result.length === 0) {
+      throw new Error('No tools remain after applying --include-tools filter.');
+    }
+
+    return result;
+  }
+
+  if (excludeTools && excludeTools.length > 0) {
+    const excludeSet = new Set(excludeTools);
+    const filtered = tools.filter((tool) => !excludeSet.has(tool.name));
+    if (filtered.length === 0) {
+      throw new Error(
+        `All tools were excluded. Exclude list: ${[...excludeSet].join(', ')}. Available tools: ${tools.map((tool) => tool.name).join(', ')}`
+      );
+    }
+    return filtered;
+  }
+
+  return tools;
+}
+
+export const __test = { ...toolsTestHelpers, applyToolFilters };
