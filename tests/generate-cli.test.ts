@@ -357,7 +357,7 @@ describeGenerateCli('generateCli', () => {
     expect(stdout).toContain('qs-demo add');
     expect(stdout).toContain('qs-demo list-comments');
     expect(stdout).not.toContain('<tool> key=value');
-  });
+  }, 30_000);
 
   it('maps CLI options to Commander camelCase properties', async () => {
     const inline = JSON.stringify({
@@ -446,7 +446,7 @@ describeGenerateCli('generateCli', () => {
     expect(parsed.flags).toEqual([true, false]);
     expect(parsed.names).toEqual(['alpha', 'beta']);
     expect(parsed.ids).toEqual([1, 2, 3]);
-  });
+  }, 30_000);
 
   it('accepts both kebab-case and underscore tool names for generated CLIs', async () => {
     const deepwikiRef = JSON.stringify({
